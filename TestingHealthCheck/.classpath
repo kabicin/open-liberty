@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8">
+		<attributes>
+			<attribute name="owner.project.facets" value="java"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="con" path="org.eclipse.jst.j2ee.internal.web.container"/>
+	<classpathentry kind="con" path="org.eclipse.jst.j2ee.internal.module.container"/>
+	<classpathentry kind="src" path="/com.ibm.websphere.javaee.jsf.2.2"/>
+	<classpathentry kind="lib" path="/Users/kirby.chin@ibm.com/.m2/repository/javax/enterprise/cdi-api/2.0/cdi-api-2.0.jar">
+		<attributes>
+			<attribute name="bsn" value="javax.enterprise:cdi-api"/>
+			<attribute name="type" value="REPO"/>
+			<attribute name="project" value="com.ibm.websphere.javaee.cdi.2.0"/>
+			<attribute name="version" value="2.0"/>
+		</attributes>
+		<accessrules>
+			<accessrule kind="accessible" pattern="javax/decorator/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/context/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/context/control/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/context/spi/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/event/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/inject/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/inject/literal/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/inject/se/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/inject/spi/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/inject/spi/configurator/*"/>
+			<accessrule kind="accessible" pattern="javax/enterprise/util/*"/>
+			<accessrule ignoreifbetter="true" kind="discouraged" pattern="**"/>
+		</accessrules>
+	</classpathentry>
+	<classpathentry kind="lib" path="/Users/kirby.chin@ibm.com/Downloads/microprofile-health-api-2.0.1.jar"/>
+	<classpathentry kind="output" path="build/classes"/>
+</classpath>
