@@ -11,5 +11,7 @@
 	<classpathentry kind="src" path="test-applications/HealthCheckNoCDIApp/src"/>
 	<classpathentry kind="con" path="aQute.bnd.classpath.container"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
+	<classpathentry kind="lib" path="/Users/kirby.chin@ibm.com/Downloads/javax.json-api-1.0.jar"/>
+	<classpathentry kind="lib" path="/Users/kirby.chin@ibm.com/Downloads/cdi-api-2.0.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
