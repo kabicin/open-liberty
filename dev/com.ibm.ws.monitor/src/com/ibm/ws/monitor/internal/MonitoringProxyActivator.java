@@ -167,7 +167,7 @@ public class MonitoringProxyActivator {
         activateThrowableProxyReturnTarget();
 
         // now that the proxies are added, inject into the Throwable class.
-        this.instrumentation.addTransformer(new ThrowableTransformer(this.throwableInfo), true);
+        this.instrumentation.addTransformer(new ThrowableTransformer(), true);
         for (Class<?> clazz : this.instrumentation.getAllLoadedClasses()) {
             if (clazz.getName().equals("java.lang.Throwable")) {
                 try {

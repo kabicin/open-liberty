@@ -106,10 +106,6 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
                             @Sensitive byte[] classfileBuffer) throws IllegalClassFormatException {
         // Skip over anything on the bootstrap loader and some VM
         // internal classes (like those in support of reflection)
-//        if (className.contains("Throwable") && className.contains("java")) {
-//            // skip
-//        } else
-
         if (loader == null && !includeBootstrap) {
             return null;
         } else if (classBeingRedefined == null) {
