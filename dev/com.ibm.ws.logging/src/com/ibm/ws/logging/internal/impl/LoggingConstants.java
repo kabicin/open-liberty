@@ -24,7 +24,7 @@ public interface LoggingConstants {
     String DEFAULT_TRACE_FILE = "trace.log";
 
     String PROP_FFDC_SUMMARY_POLICY = "com.ibm.ws.logging.ffdc.summary.policy";
-
+   
     String PROP_TRACE_DELEGATE = "com.ibm.ws.logging.trace.delegate";
     String DEFAULT_TRACE_IMPLEMENTATION = "com.ibm.ws.logging.internal.impl.BaseTraceService";
     String JSR47_TRACE_IMPLEMENTATION = "com.ibm.ws.logging.internal.impl.Jsr47TraceService";

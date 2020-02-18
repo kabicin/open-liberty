@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
+import java.lang.reflect.Method;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +49,7 @@ public class DynamicTraceInstrumentation {
 
         // Plug-in to the instrumentation framework.
         inst.addTransformer(new Transformer(props, false));
+        
     }
 }
 

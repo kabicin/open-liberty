@@ -64,6 +64,8 @@ import com.ibm.ws.logging.utils.CollectorManagerPipelineUtils;
 import com.ibm.ws.logging.utils.FileLogHolder;
 import com.ibm.ws.logging.utils.RecursionCounter;
 import com.ibm.ws.logging.utils.SequenceNumber;
+import com.ibm.ws.ras.instrument.annotation.ThrowableAtEntry;
+import com.ibm.ws.ras.instrument.annotation.ThrowableAtReturn;
 import com.ibm.wsspi.collector.manager.SynchronousHandler;
 import com.ibm.wsspi.logging.LogHandler;
 import com.ibm.wsspi.logging.MessageRouter;
@@ -135,6 +137,10 @@ public class BaseTraceService implements TrService {
     /** Special trace component for system streams: this one "remembers" the original system err */
     protected final SystemLogHolder systemErr;
 
+    protected final SystemLogHolder systemErrStackTrace;
+
+//    protected final SystemLogHolder systemErrStackTrace;
+
     public static final Object NULL_ID = null;
     public static final Logger NULL_LOGGER = null;
     public static final String NULL_FORMATTED_MSG = null;
@@ -195,6 +201,8 @@ public class BaseTraceService implements TrService {
     /** A PrintStream that tees to the original System.err and to our logs. */
     protected TeePrintStream teeErr = null;
 
+    protected SuspendedPrintStream suspendedErr = null;
+
     /** The header written at the beginning of all log files. */
     private String logHeader;
     /** True if java.lang.instrument is available for trace. */
@@ -230,6 +238,11 @@ public class BaseTraceService implements TrService {
     private static class StackTraceFlags {
         boolean needsToOutputInternalPackageMarker = false;
         boolean isSuppressingTraces = false;
+
+        // flags for the SuspendedPrintStream
+        boolean parsingStackTrace = false;
+        StringBuilder rawStackTrace = new StringBuilder();
+        StringBuilder filteredStackTrace = new StringBuilder();
     }
 
     /** Track the stack trace printing activity of the current thread */
@@ -246,6 +259,7 @@ public class BaseTraceService implements TrService {
     public BaseTraceService() {
         systemOut = new SystemLogHolder(LoggingConstants.SYSTEM_OUT, System.out);
         systemErr = new SystemLogHolder(LoggingConstants.SYSTEM_ERR, System.err);
+        systemErrStackTrace = new SystemLogHolder(LoggingConstants.SYSTEM_ERR, System.err);
 
         earlyMessageTraceKiller_Timer.schedule(new EarlyMessageTraceCleaner(), 5 * MINUTE); // 5 minutes wait time
     }
@@ -940,14 +954,19 @@ public class BaseTraceService implements TrService {
         } else {
             routedMessage = new RoutedMessageImpl(logRecord.getMessage(), logRecord.getMessage(), null, logRecord);
         }
-        invokeMessageRouters(routedMessage);
+        boolean parsing = traceFlags.get().parsingStackTrace;
+        if (!parsing)
+            invokeMessageRouters(routedMessage);
+//        if (!parsing) {
         if (logSource != null) {
             publishToLogSource(routedMessage);
         }
         //send events to handlers
-        if (TraceComponent.isAnyTracingEnabled()) {
+        if (!parsing && TraceComponent.isAnyTracingEnabled()) {
             publishTraceLogRecord(detailLog, logRecord, NULL_ID, NULL_FORMATTED_MSG, NULL_FORMATTED_MSG);
         }
+//        }
+
     }
 
     /**
@@ -1712,7 +1731,157 @@ public class BaseTraceService implements TrService {
                 super.flush();
             }
         }
+    }
 
+    public final static class SuspendedPrintStream extends PrintStream {
+        protected final TrOutputStream trStream;
+
+        public SuspendedPrintStream(TrOutputStream trStream, boolean autoFlush) {
+            super(trStream, autoFlush);
+            this.trStream = trStream;
+        }
+
+        @Override
+        public synchronized void print(boolean b) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(b);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(char c) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(c);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(int i) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(i);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(long l) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(l);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(float f) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(f);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(double d) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(d);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(char c[]) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(c);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(String s) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(s);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void print(Object obj) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(obj);
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println() {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(boolean b) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(b);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(char c) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(c);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(int i) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(i);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(long l) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(l);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(float f) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(f);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(double d) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(d);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(char c[]) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(c);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(String s) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(s);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
+
+        @Override
+        public synchronized void println(Object obj) {
+            StackTraceFlags stf = traceFlags.get();
+            stf.rawStackTrace.append(obj);
+            stf.rawStackTrace.append("\n");
+            traceFlags.set(stf);
+        }
     }
 
     /**
@@ -1724,6 +1893,7 @@ public class BaseTraceService implements TrService {
     public static class TrOutputStream extends ByteArrayOutputStream {
         final SystemLogHolder holder;
         final BaseTraceService service;
+
         public static ThreadLocal<Boolean> isPrinting = new ThreadLocal<Boolean>() {
             @Override
             protected Boolean initialValue() {
@@ -1740,7 +1910,7 @@ public class BaseTraceService implements TrService {
         public synchronized void flush() throws IOException {
 
             /*
-             * sPrinting is a ThreadLocal that is set to disable flushing while printing.
+             * isPrinting is a ThreadLocal that is set to disable flushing while printing.
              * This helps us ignore flush requests that the JDK automatically creates in the middle of printing large (>8k) strings.
              * We want the whole String to be flushed in one shot for benefit of downstream event consumers.
              */
@@ -1807,7 +1977,47 @@ public class BaseTraceService implements TrService {
         if (holder == systemErr && rawStream) {
             txt = "[err] " + txt;
         }
+
         holder.originalStream.println(txt);
+
+    }
+
+    @ThrowableAtEntry(method = "printStackTrace")
+    public void printStackTraceOnEnter() {
+        StackTraceFlags stf = traceFlags.get();
+        if (!stf.parsingStackTrace) {
+            stf.parsingStackTrace = true;
+            // Set stream to SuspendedPrintStream that ignores all print calls
+            suspendedErr = new SuspendedPrintStream(new TrOutputStream(systemErr, this), false);
+            System.setErr(suspendedErr);
+            traceFlags.set(stf);
+        }
+    }
+
+    @ThrowableAtReturn(method = "printStackTrace")
+    public void printStackTraceOnReturn() {
+        // Return the stream
+        System.setErr(systemErr.getOriginalStream());
+
+        // Filter raw stack traces into another ThreadLocal StringBuilder
+        StackTraceFlags stf = traceFlags.get();
+        String[] rawStackTrace = stf.rawStackTrace.toString().split("\\r?\\n");
+        String trace;
+        for (int i = 0; i < rawStackTrace.length; i++) {
+            if ((trace = BaseTraceService.filterStackTraces(rawStackTrace[i])) != null) {
+                stf.filteredStackTrace.append(trace + "\n");
+            }
+        }
+        String finalStackTrace = stf.filteredStackTrace.toString();
+        if (finalStackTrace.length() > 0) {
+            System.err.println(stf.filteredStackTrace.toString());
+        }
+
+        // clear the ThreadLocal StringBuffers
+        stf.rawStackTrace.setLength(0);
+        stf.filteredStackTrace.setLength(0);
+        stf.parsingStackTrace = false;
+        traceFlags.set(stf);
     }
 
     /**
@@ -1876,6 +2086,10 @@ public class BaseTraceService implements TrService {
             stackTraceFlags.isSuppressingTraces = false;
             stackTraceFlags.needsToOutputInternalPackageMarker = false;
         }
+
+//        if (txt != null && stackTraceFlags.parsingStackTrace) {
+//            stackTraceFlags.currentStackTrace.append(txt + "\n");
+//        }
         return txt;
     }
 

@@ -17,6 +17,7 @@ import java.io.StringWriter;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
+import java.lang.instrument.UnmodifiableClassException;
 import java.lang.ref.WeakReference;
 import java.security.ProtectionDomain;
 import java.util.Collections;
@@ -34,6 +35,9 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.logging.internal.NLSConstants;
 import com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter;
+import com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter;
+import com.ibm.ws.ras.instrument.internal.model.ThrowableInfo;
+
 
 /**
  * This class is responsible for instrumenting classes that have been
@@ -107,6 +111,8 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
     
     private static final Boolean isJDK8WithHotReplaceBug = LibertyJava8WorkaroundRuntimeTransformer.checkJDK8WithHotReplaceBug() ? Boolean.TRUE :  Boolean.FALSE;
 
+    private static ThrowableInfo throwableInfo;
+    
     /**
      * Set the {@link java.lang.instrument.Instrumenation} instance to use for
      * for trace injection.
@@ -124,7 +130,7 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
             // change logic to warn when instrumentation isn't available
             // reference when one wasn't made available by the bootstrap agent
             //  Tr.warning(tc, "INSTRUMENTATION_SERVICE_UNAVAILABLE");
-        } else {
+        } else {        
             if (Boolean.getBoolean("com.ibm.websphere.ras.inject.at.transform")) {
                 setInjectAtTransform(true);
             } else if (!instrumentation.isRetransformClassesSupported()) {
@@ -148,6 +154,8 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
             addTransformer();
         }
     }
+    
+    
 
     /**
      * Indicate whether or not class debug data should be preserved in the
@@ -167,7 +175,21 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
 
         if (registeredTransformer == null && instrumentation != null) {
             registeredTransformer = new LibertyRuntimeTransformer();
+            
+          
+            
             instrumentation.addTransformer(registeredTransformer, true);
+//            instrumentation.addTransformer(new ThrowableTransformer(new ThrowableInfo(instrumentation)), true);
+//            for (Class<?> clazz : instrumentation.getAllLoadedClasses()) {
+//                if(clazz.getName().equals("java.lang.Throwable")) {
+//                	try {
+//                		System.out.println("Transforming!!");
+//                        instrumentation.retransformClasses(clazz);
+//                    } catch (Throwable t) {
+//                    }
+//                }
+//            }
+            
         }
 
         if (detailedTransformTrace && tc.isEntryEnabled())
@@ -288,16 +310,17 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
         try {
             // Class reader must maintain all metadata information that's present in
             // the class
-            reader.accept(tracingClassAdapter, skipDebugData ? ClassReader.SKIP_DEBUG : 0);
+            reader.accept(tracingClassAdapter, skipDebugData ? ClassReader.SKIP_DEBUG : 0); 
         } catch (Throwable t) {
             IOException ioe = new IOException("Unable to instrument class stream with trace: " + t.getMessage(), t);
             throw ioe;
         }
+        
 
         // Provide a whole lot of detailed information on the resulting class
         if (detailedTransformTrace && tc.isDumpEnabled() && tracingClassAdapter.isClassModified()) {
             Tr.dump(tc, "Transformed class", sw);
-        }
+        }  
 
         // Try to short circuit when the class didn't change
         byte[] result = tracingClassAdapter.isClassModified() ? writer.toByteArray() : null;
@@ -325,6 +348,7 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
             Tr.entry(this, tc, "transform", loader, className, classBeingRedefined, protectionDomain);
 
         byte[] newClassBytes = null;
+        
         if (isTransformPossible(classfileBuffer)) {
             boolean traceEnabledForClass = injectAtTransform;
             if (!injectAtTransform && classBeingRedefined != null) {
@@ -339,6 +363,7 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
                     Tr.error(tc, "INSTRUMENTATION_TRANSFORM_FAILED_FOR_CLASS_2", className, t);
                 }
             }
+            
         }
 
         if (detailedTransformTrace && tc.isEntryEnabled())

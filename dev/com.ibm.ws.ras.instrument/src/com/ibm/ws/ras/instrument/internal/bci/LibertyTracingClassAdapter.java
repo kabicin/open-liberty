@@ -17,11 +17,9 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Type;
 
-import com.ibm.websphere.ras.annotation.TraceOptions;
 import com.ibm.ws.ras.instrument.internal.main.LibertyTracePreprocessInstrumentation.ClassTraceInfo;
 import com.ibm.ws.ras.instrument.internal.model.ClassInfo;
 import com.ibm.ws.ras.instrument.internal.model.FieldInfo;
-import com.ibm.ws.ras.instrument.internal.model.TraceOptionsData;
 
 /**
  * A <code>RasClassAdapter</code> implementation that generates calls to
@@ -44,7 +42,8 @@ public class LibertyTracingClassAdapter extends AbstractTracingRasClassAdapter {
     public final static Type TRACE_COMPONENT_TYPE = Type.getObjectType("com/ibm/websphere/ras/TraceComponent");
 
     private final static String DEFAULT_TRACE_COMPONENT_FIELD_NAME = "$$$tc$$$";
-
+    
+  
     private FieldInfo declaredLoggerField;
     private FieldInfo traceComponentField;
     private boolean traceComponentAlreadyDefined;
@@ -58,7 +57,6 @@ public class LibertyTracingClassAdapter extends AbstractTracingRasClassAdapter {
 
     public LibertyTracingClassAdapter(ClassVisitor visitor, ClassInfo classInfo) {
         super(visitor, classInfo);
-
         // Look for an annotated field with the correct type
         if (classInfo != null) {
             declaredLoggerField = classInfo.getDeclaredLoggerField();
@@ -107,6 +105,29 @@ public class LibertyTracingClassAdapter extends AbstractTracingRasClassAdapter {
         createdMethodAdapters.add(methodAdapter);
         return methodAdapter;
     }
+	
+//	@Override
+//	public MethodVisitor createThrowableRasMethodAdapter(MethodVisitor mv, int access, String name, String descriptor, String signature, String[] exceptions) {
+		// Use the super class's observation of the TraceObjectField annotation
+        // to detect a pre-processed class. This is a little bit of a kludge but
+        // avoids throwing on yet another annotation.
+//        if (onlyInstrumentPreprocessed && super.getTraceObjectAnnotationFieldName() == null) {
+//            return null;
+//        }
+//        // If the trace object field is not an Liberty TraceComponent, don't
+//        // attempt to instrument the class. The WsLogger object will inflate a
+//        // TraceComponent with a class literal from the call stack at the time
+//        // the logger is obtained. That means when the trace spec changes, a
+//        // class redefine will be attempted.
+//        if (onlyInstrumentPreprocessed && !super.getTraceObjectAnnotationFieldType().equals(TRACE_COMPONENT_TYPE)) {
+//            return null;
+//        }
+//		
+
+//			System.out.println(String.format("access: %d name: %s desc: %d signature: %s exceptions: %s", access, name != null ? name : "", descriptor != null ? descriptor: "", signature != null ? signature: "", exceptions != null ? exceptions.toString() : ""));
+//		MethodVisitor throwableMethodAdapter = new ThrowableMethodAdapter(mv, access, name, descriptor, signature, exceptions);
+//		return throwableMethodAdapter;
+//	}
 
     @Override
     public String getTraceObjectFieldName() {
@@ -173,7 +194,5 @@ public class LibertyTracingClassAdapter extends AbstractTracingRasClassAdapter {
 	public boolean isTraceComponentAlreadyDefined() {
 		return traceComponentAlreadyDefined;
 	}
-
-
 
 }

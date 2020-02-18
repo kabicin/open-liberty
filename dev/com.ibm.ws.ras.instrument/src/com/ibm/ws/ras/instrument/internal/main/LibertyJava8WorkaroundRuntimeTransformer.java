@@ -33,6 +33,7 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.logging.internal.NLSConstants;
 import com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter;
+//import com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter;
 
 /**
  * This class is responsible for instrumenting java8 classes at classload time only.
@@ -270,8 +271,6 @@ public class LibertyJava8WorkaroundRuntimeTransformer implements ClassFileTransf
 		if (detailedTransformTrace && tc.isEntryEnabled())
             Tr.entry(tc, "transform");
         
-        
-        
         ClassReader reader = new ClassReader(bytes);
         ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
 
@@ -284,22 +283,48 @@ public class LibertyJava8WorkaroundRuntimeTransformer implements ClassFileTransf
         }
 
         LibertyTracingClassAdapter tracingClassAdapter = new LibertyTracingClassAdapter(visitor, skipIfNotPreprocessed);
+//        BaseTraceServiceClassAdapter baseTraceServiceClassAdapter = new BaseTraceServiceClassAdapter(visitor, skipIfNotPreprocessed);
         try {
             // Class reader must maintain all metadata information that's present in
             // the class
             reader.accept(tracingClassAdapter, skipDebugData ? ClassReader.SKIP_DEBUG : 0);
+//            reader.accept(baseTraceServiceClassAdapter, skipDebugData ? ClassReader.SKIP_DEBUG : 0);
         } catch (Throwable t) {
             IOException ioe = new IOException("Unable to instrument class stream with trace: " + t.getMessage(), t);
             throw ioe;
         }
+        
+//        ClassReader reader2 = new ClassReader(writer.toByteArray());
+//        ClassWriter writer2 = new ClassWriter(reader2, ClassWriter.COMPUTE_MAXS);
+//        StringWriter sw2 = null;
+//        ClassVisitor visitor2 = writer2;
+//        if (tc.isDumpEnabled()) {
+//            sw2 = new StringWriter();
+//            visitor2 = new CheckClassAdapter(visitor2, false);
+//            visitor2 = new TraceClassVisitor(visitor2, new PrintWriter(sw2));
+//        }
+//        ThrowableClassAdapter baseTraceServiceClassAdapter = new ThrowableClassAdapter(visitor2, skipIfNotPreprocessed);
+//        try {
+//            // Class reader must maintain all metadata information that's present in
+//            // the class
+//            reader2.accept(baseTraceServiceClassAdapter, skipDebugData ? ClassReader.SKIP_DEBUG : 0);            
+//        } catch (Throwable t) {
+//            IOException ioe = new IOException("Unable to instrument class stream with trace: " + t.getMessage(), t);
+//            throw ioe;
+//        }
+
 
         // Provide a whole lot of detailed information on the resulting class
         if (detailedTransformTrace && tc.isDumpEnabled() && tracingClassAdapter.isClassModified()) {
             Tr.dump(tc, "Transformed class", sw);
         }
+//        if (detailedTransformTrace && tc.isDumpEnabled() && baseTraceServiceClassAdapter.isClassModified()) {
+//            Tr.dump(tc, "Transformed class", sw2);
+//        }
 
         // Try to short circuit when the class didn't change
         byte[] result = tracingClassAdapter.isClassModified() ? writer.toByteArray() : null;
+//        byte[] result = baseTraceServiceClassAdapter.isClassModified() ? writer2.toByteArray() : null;
         if (detailedTransformTrace && tc.isEntryEnabled())
             Tr.exit(tc, "transform", result);
         return result;

@@ -32,11 +32,11 @@ public class ProbeAtEntryMethodAdapter extends ProbeMethodAdapter {
      * Set of active listeners that are interested in method entry at this
      * probe site.
      */
-    private Set<ProbeListener> enabledListeners = new HashSet<ProbeListener>();
+    private final Set<ProbeListener> enabledListeners = new HashSet<ProbeListener>();
 
     /**
      * Create a new method adapter that injects a probe at method entry.
-     * 
+     *
      * @param probeMethodAdapter the chained adapter
      */
     protected ProbeAtEntryMethodAdapter(ProbeMethodAdapter probeMethodAdapter, MethodInfo methodInfo, Set<ProbeListener> interested) {

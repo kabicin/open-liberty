@@ -12,6 +12,8 @@ package com.ibm.ws.ras.instrument.internal.bci;
 
 import static com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter.TRACE_COMPONENT_TYPE;
 import static com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter.TR_TYPE;
+//import static com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter.BASE_TRACE_SERVICE_TYPE;
+//import static com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter.BASE_TRACE_SERVICE_SYSTEM_LOG_HOLDER_TYPE;
 import static org.objectweb.asm.Opcodes.ICONST_0;
 
 import java.util.Iterator;
@@ -45,6 +47,7 @@ public class LibertyTracingMethodAdapter extends AbstractRasMethodAdapter<Abstra
     }
 
     private void setModifiedMethod(boolean modified) {
+    	
         this.modifiedMethod = modified;
     }
 
@@ -167,10 +170,11 @@ public class LibertyTracingMethodAdapter extends AbstractRasMethodAdapter<Abstra
 
     @Override
     public boolean onThrowInstruction() {
-        if (skipTraces || !getClassAdapter().isTraceExceptionOnThrow() || isAlreadyTraced()) {
+    	if (skipTraces || !getClassAdapter().isTraceExceptionOnThrow() || isAlreadyTraced()) {
             return false;
         }
-
+  
+        
         Label skipTraceLabel = new Label();
         visitInvokeTraceGuardMethod("isDebugEnabled", skipTraceLabel);
 
@@ -208,6 +212,8 @@ public class LibertyTracingMethodAdapter extends AbstractRasMethodAdapter<Abstra
             return false;
         }
 
+       
+        
         Label skipTraceLabel = new Label();
         visitInvokeTraceGuardMethod("isDebugEnabled", skipTraceLabel);
 
@@ -362,18 +368,16 @@ public class LibertyTracingMethodAdapter extends AbstractRasMethodAdapter<Abstra
     }
 
 	@Override
-	public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-		
-		//replace existing method with fully qualified version
+	public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {	
+        //replace existing method with fully qualified version	
 		if ((name.equals("register")) && (desc.equals("(Ljava/lang/Class;)Lcom/ibm/websphere/ras/TraceComponent;"))) {
 			
 			getClassAdapter().visitAnnotation(AbstractRasClassAdapter.TRACE_OPTIONS_TYPE.getDescriptor(), true);
 	    	TraceOptionsData traceOptionsData = getClassAdapter().getTraceOptionsData();
-	    	
+            
 	    	if (traceOptionsData.getTraceGroups().size() > 1){
     		
     	        String[] traceGroups = traceOptionsData.getTraceGroups().toArray(new String[traceOptionsData.getTraceGroups().size()]);
-    	       
     	        visitInsn(ICONST_0 + traceGroups.length);
     	        visitTypeInsn(ANEWARRAY, "java/lang/String");
 

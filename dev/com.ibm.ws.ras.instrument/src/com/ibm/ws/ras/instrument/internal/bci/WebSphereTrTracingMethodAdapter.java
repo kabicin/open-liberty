@@ -30,6 +30,7 @@ public class WebSphereTrTracingMethodAdapter extends AbstractRasMethodAdapter<Ab
 
     @Override
     public boolean onMethodEntry() {
+
         if (isTrivial() || isAlreadyTraced()) {
             return false;
         }

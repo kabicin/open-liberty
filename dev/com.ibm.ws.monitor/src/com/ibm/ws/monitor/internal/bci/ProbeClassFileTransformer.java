@@ -69,7 +69,7 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
 
     /**
      * Create a new transformer and associate it with the specified {@code ProbeManagerImpl}.
-     * 
+     *
      * @param probeManagerImpl the probe management component
      * @param instrumentation the {@code Instrumentation} reference for this VM
      * @param includeBootstrap include classes defined to the bootstrap loader
@@ -82,7 +82,7 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
 
     /**
      * Instrument the provided classes with the appropriate probes.
-     * 
+     *
      * @param classes target classes to process
      */
     public void instrumentWithProbes(Collection<Class<?>> classes) {
@@ -106,6 +106,10 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
                             @Sensitive byte[] classfileBuffer) throws IllegalClassFormatException {
         // Skip over anything on the bootstrap loader and some VM
         // internal classes (like those in support of reflection)
+//        if (className.contains("Throwable") && className.contains("java")) {
+//            // skip
+//        } else
+
         if (loader == null && !includeBootstrap) {
             return null;
         } else if (classBeingRedefined == null) {
@@ -123,10 +127,10 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
 
     /**
      * Inject the byte code required to fire probes.
-     * 
+     *
      * @param classfileBuffer the source class file
      * @param probes the probe sites to activate
-     * 
+     *
      * @return the modified class file
      */
     @Sensitive
@@ -149,6 +153,7 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
 //        if (tc.isDumpEnabled()) {
 //            visitor = new CheckClassAdapter(visitor);
 //        }
+
         ProbeInjectionClassAdapter probeAdapter = new ProbeInjectionClassAdapter(visitor, probeManagerImpl, clazz);
         visitor = probeAdapter;
 
@@ -176,9 +181,7 @@ public class ProbeClassFileTransformer implements ClassFileTransformer {
         try {
             InputStream inputStream = new ByteArrayInputStream(classfileBuffer);
             ClassReader reader = new ClassReader(inputStream);
-            reader.accept(new TraceClassVisitor(null,
-                            new ASMifier(),
-                            new PrintWriter(stringWriter)), 0);
+            reader.accept(new TraceClassVisitor(null, new ASMifier(), new PrintWriter(stringWriter)), 0);
             inputStream.close();
         } catch (Throwable t) {
             if (tc.isDebugEnabled()) {

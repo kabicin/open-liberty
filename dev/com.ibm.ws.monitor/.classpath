@@ -4,5 +4,11 @@
 	<classpathentry kind="src" output="bin_test" path="test"/>
 	<classpathentry kind="con" path="aQute.bnd.classpath.container"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
+	<classpathentry combineaccessrules="false" exported="true" kind="src" path="/com.ibm.ws.ras.instrument"/>
+	<classpathentry kind="lib" path="/Users/kirby.chin@ibm.com/libertyGit3/open-liberty/dev/com.ibm.ws.org.objectweb.asm/build/libs/com.ibm.ws.org.objectweb.asm.jar">
+		<attributes>
+			<attribute name="gradle_used_by_scope" value="main,test"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

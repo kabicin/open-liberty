@@ -223,7 +223,7 @@ public class SRTInputStream31 extends SRTInputStream
                 Tr.debug(tc, "An exception occurred while setting the ReadListener : " + e);
             }
             //There was a problem with the read so we should invoke their onError, since technically it's been set now
-            this.listener.onError(e);
+//            this.listener.onError(e);
         }
         
         if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled())

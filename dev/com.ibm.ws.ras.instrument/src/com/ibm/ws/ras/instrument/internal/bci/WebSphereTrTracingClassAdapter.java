@@ -74,6 +74,11 @@ public class WebSphereTrTracingClassAdapter extends AbstractTracingRasClassAdapt
     public RasMethodAdapter createRasMethodAdapter(MethodVisitor mv, int access, String name, String descriptor, String signature, String[] exceptions) {
         return new WebSphereTrTracingMethodAdapter(this, mv, access, name, descriptor, signature, exceptions);
     }
+	
+//	@Override
+    public MethodVisitor createThrowableRasMethodAdapter(MethodVisitor mv, int access, String name, String descriptor, String signature, String[] exceptions) {
+        return new WebSphereTrTracingMethodAdapter(this, mv, access, name, descriptor, signature, exceptions);
+    }
 
     @Override
     public String getTraceObjectFieldName() {

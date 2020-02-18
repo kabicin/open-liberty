@@ -32,7 +32,6 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.SimpleRemapper;
 import org.osgi.framework.Bundle;
@@ -41,9 +40,11 @@ import org.osgi.service.component.ComponentException;
 
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
 import com.ibm.ws.monitor.internal.bci.ProbeMethodAdapter;
+import com.ibm.ws.monitor.internal.bci.ThrowableTransformer;
 import com.ibm.ws.monitor.internal.bci.remap.AddVersionFieldClassAdapter;
 import com.ibm.ws.monitor.internal.boot.templates.ClassAvailableProxy;
 import com.ibm.ws.monitor.internal.boot.templates.ProbeProxy;
+import com.ibm.ws.monitor.internal.boot.templates.ThrowableProxy;
 
 /**
  * Component that is responsible for generating and installing the
@@ -80,10 +81,16 @@ public class MonitoringProxyActivator {
      */
     public final static String CLASS_AVAILABLE_PROXY_CLASS_INTERNAL_NAME = CLASS_AVAILABLE_PROXY_CLASS_NAME.replaceAll("\\.", "/");
 
+    public final static String THROWABLE_PROXY_CLASS_NAME = BOOT_DELEGATED_PACKAGE + "." + ThrowableProxy.class.getSimpleName();
+
+    public final static String THROWABLE_PROXY_CLASS_INTERNAL_NAME = THROWABLE_PROXY_CLASS_NAME.replaceAll("\\.", "/");
+
     /**
      * The bundle entry path prefix to the template classes.
      */
     final static String TEMPLATE_CLASSES_PATH = ProbeProxy.class.getPackage().getName().replaceAll("\\.", "/");
+
+    final static String TEMPLATE_CLASSES_PATH_2 = ThrowableProxy.class.getPackage().getName().replaceAll("\\.", "/");
 
     /**
      * The name of the field in generated classes that will contain the
@@ -112,17 +119,20 @@ public class MonitoringProxyActivator {
      */
     final ProbeManagerImpl probeManagerImpl;
 
+    public static ThrowableInfo throwableInfo;
+
     /**
      * Construct a new proxy activator.
      *
-     * @param bundleContext    the {@link BundleContext} of the owning bundle
+     * @param bundleContext the {@link BundleContext} of the owning bundle
      * @param probeManagerImpl the owning {@link ProbeManagerImpl}
-     * @param instrumentation  the java {@link Instrumentation} service reference
+     * @param instrumentation the java {@link Instrumentation} service reference
      */
     MonitoringProxyActivator(BundleContext bundleContext, ProbeManagerImpl probeManagerImpl, Instrumentation instrumentation) {
         this.bundleContext = bundleContext;
         this.probeManagerImpl = probeManagerImpl;
         this.instrumentation = instrumentation;
+
     }
 
     /**
@@ -141,17 +151,33 @@ public class MonitoringProxyActivator {
         }
 
         // Find or create the proxy jar if the runtime code isn't loaded
-        if (runtimeVersion == null) {
-            JarFile proxyJar = getBootProxyJarIfCurrent();
-            if (proxyJar == null) {
-                proxyJar = createBootProxyJar();
-            }
-            instrumentation.appendToBootstrapClassLoaderSearch(proxyJar);
+//        if (runtimeVersion == null) {
+        JarFile proxyJar = null; //getBootProxyJarIfCurrent();
+        if (proxyJar == null) {
+            proxyJar = createBootProxyJar();
         }
+        instrumentation.appendToBootstrapClassLoaderSearch(proxyJar);
+//        }
+
+        throwableInfo = new ThrowableInfo(this.instrumentation);
 
         // Hook up the proxies
         activateProbeProxyTarget();
         activateClassAvailableProxyTarget();
+        activateThrowableProxyEnterTarget();
+        activateThrowableProxyReturnTarget();
+
+        // now that the proxies are added, inject into the Throwable class.
+        this.instrumentation.addTransformer(new ThrowableTransformer(this.throwableInfo), true);
+        for (Class<?> clazz : this.instrumentation.getAllLoadedClasses()) {
+            if (clazz.getName().equals("java.lang.Throwable")) {
+                try {
+                    this.instrumentation.retransformClasses(clazz);
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
+        }
     }
 
     /**
@@ -163,6 +189,7 @@ public class MonitoringProxyActivator {
         try {
             deactivateClassAvailableProxyTarget();
             deactivateProbeProxyTarget();
+            deactivateThrowableProxyTarget();
         } catch (Exception e) {
             throw new ComponentException(e);
         }
@@ -248,7 +275,9 @@ public class MonitoringProxyActivator {
         Enumeration<?> entryPaths = bundle.getEntryPaths(TEMPLATE_CLASSES_PATH);
         if (entryPaths != null) {
             while (entryPaths.hasMoreElements()) {
-                URL sourceClassResource = bundle.getEntry((String) entryPaths.nextElement());
+                String nextElem = (String) entryPaths.nextElement();
+
+                URL sourceClassResource = bundle.getEntry(nextElem);
                 if (sourceClassResource != null)
                     writeRemappedClass(sourceClassResource, jarOutputStream, BOOT_DELEGATED_PACKAGE);
             }
@@ -264,7 +293,7 @@ public class MonitoringProxyActivator {
      * Create the jar directory entries corresponding to the specified package
      * name.
      *
-     * @param jarStream   the target jar's output stream
+     * @param jarStream the target jar's output stream
      * @param packageName the target package name
      *
      * @throws IOException if an IO exception raised while creating the entries
@@ -297,7 +326,6 @@ public class MonitoringProxyActivator {
         ClassRemapper remappingVisitor = new ClassRemapper(writer, remapper);
         ClassVisitor versionVisitor = new AddVersionFieldClassAdapter(remappingVisitor, VERSION_FIELD_NAME, getCurrentVersion());
         reader.accept(versionVisitor, ClassReader.EXPAND_FRAMES);
-
         JarEntry jarEntry = new JarEntry(targetInternalName + ".class");
         jarStream.putNextEntry(jarEntry);
         jarStream.write(writer.toByteArray());
@@ -316,8 +344,7 @@ public class MonitoringProxyActivator {
         InputStream inputStream = classUrl.openStream();
 
         ClassReader reader = new ClassReader(inputStream);
-        reader.accept(new ClassVisitor(Opcodes.ASM7) {
-        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        reader.accept(new ClassVisitor(Opcodes.ASM7) {}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         inputStream.close();
 
         return reader.getClassName();
@@ -328,7 +355,7 @@ public class MonitoringProxyActivator {
      * class across packages.
      *
      * @param sourceInternalName the internal name of the template class
-     * @param targetPackage      the package to move the class to
+     * @param targetPackage the package to move the class to
      *
      * @return the target class name
      */
@@ -397,10 +424,34 @@ public class MonitoringProxyActivator {
                                                            ProbeMethodAdapter.FIRE_PROBE_METHOD_NAME,
                                                            long.class, Object.class, Object.class, Object.class);
         ReflectionHelper.setAccessible(method, true);
-        if (!Type.getMethodDescriptor(method).equals(ProbeMethodAdapter.FIRE_PROBE_METHOD_DESC)) {
-            throw new IncompatibleClassChangeError("Proxy method signature does not match byte code");
-        }
+//        if (!Type.getMethodDescriptor(method).equals(ProbeMethodAdapter.FIRE_PROBE_METHOD_DESC)) {
+//            throw new IncompatibleClassChangeError("Proxy method signature does not match byte code");
+//        }
         findProbeProxySetFireProbeTargetMethod().invoke(null, probeManagerImpl, method);
+    }
+
+    /**
+     * Hook up the monitoring boot proxy delegate.
+     *
+     * @throws Exception the method invocation exception
+     */
+    void activateThrowableProxyEnterTarget() throws Exception {
+        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnEnter");
+        ReflectionHelper.setAccessible(method, true);
+        findThrowableProxySetFireTargetMethod().invoke(null, this, method, true);
+    }
+
+    void activateThrowableProxyReturnTarget() throws Exception {
+        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnReturn");
+        ReflectionHelper.setAccessible(method, true);
+        findThrowableProxySetFireTargetMethod().invoke(null, this, method, false);
+    }
+
+    Method findThrowableProxySetFireTargetMethod() throws Exception {
+        Class<?> proxyClass = Class.forName(THROWABLE_PROXY_CLASS_NAME);
+        Method method = ReflectionHelper.getDeclaredMethod(proxyClass, "setFireTarget", Object.class, Method.class, boolean.class);
+        ReflectionHelper.setAccessible(method, true);
+        return method;
     }
 
     /**
@@ -410,6 +461,11 @@ public class MonitoringProxyActivator {
      */
     void deactivateProbeProxyTarget() throws Exception {
         findProbeProxySetFireProbeTargetMethod().invoke(null, null, null);
+    }
+
+    void deactivateThrowableProxyTarget() throws Exception {
+        findThrowableProxySetFireTargetMethod().invoke(null, null, null, true);
+        findThrowableProxySetFireTargetMethod().invoke(null, null, null, false);
     }
 
     /**
@@ -455,4 +511,25 @@ public class MonitoringProxyActivator {
     public void classAvailable(Class<?> clazz) {
         probeManagerImpl.classAvailable(clazz);
     }
+
+    public void fireThrowableOnEnter() {
+        Method method = throwableInfo.getPreThrow();
+        try {
+            method.invoke(throwableInfo.getBtsInstance());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void fireThrowableOnReturn() {
+        Method method = throwableInfo.getPostThrow();
+        try {
+            method.invoke(throwableInfo.getBtsInstance());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
 }

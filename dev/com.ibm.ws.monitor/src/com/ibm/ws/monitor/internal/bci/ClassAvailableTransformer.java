@@ -60,7 +60,7 @@ public class ClassAvailableTransformer implements ClassFileTransformer {
 
     /**
      * Create a new transformer and associate it with the specified {@code ProbeManagerImpl}.
-     * 
+     *
      * @param probeManagerImpl the probe management component
      * @param instrumentation the {@code Instrumentation} reference for this VM
      * @param includeBootstrap include classes defined to the bootstrap loader
@@ -83,7 +83,9 @@ public class ClassAvailableTransformer implements ClassFileTransformer {
                             byte[] classfileBuffer) throws IllegalClassFormatException {
         // Skip over anything on the bootstrap loader and some VM
         // internal classes (like those in support of reflection)
-        if ((loader == null && !includeBootstrap) || probeManagerImpl.isExcludedClass(className)) {
+
+        if ((loader == null && !includeBootstrap)
+            || probeManagerImpl.isExcludedClass(className)) {
             return null;
         }
 
@@ -91,16 +93,15 @@ public class ClassAvailableTransformer implements ClassFileTransformer {
         if (probeManagerImpl.isProbeCandidate(className)) {
             return transformCandidate(classfileBuffer);
         }
-
         return null;
     }
 
     /**
      * Inject the byte code required to call the {@code processCandidate} proxy
      * after class initialization.
-     * 
+     *
      * @param classfileBuffer the source class file
-     * 
+     *
      * @return the modified class file
      */
     byte[] transformCandidate(byte[] classfileBuffer) {

@@ -152,6 +152,8 @@ public class StaticTraceInstrumentation extends AbstractInstrumentation {
                 visitor = new WebSphereTrTracingClassAdapter(visitor, classInfo);
                 break;
         }
+        
+      
 
         if (getInstrumentWithFFDC()) {
             visitor = new FFDCClassAdapter(visitor, classInfo);

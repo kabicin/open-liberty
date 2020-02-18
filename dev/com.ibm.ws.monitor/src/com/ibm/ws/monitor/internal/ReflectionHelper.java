@@ -51,6 +51,7 @@ class ReflectionHelper {
 
     private static <T> Class<? super T> doPrivGetSuperclass(final Class<T> clazz) {
         return AccessController.doPrivileged(new PrivilegedAction<Class<? super T>>() {
+            @Override
             public Class<? super T> run() {
                 return doGetSuperclass(clazz);
             }
@@ -76,6 +77,7 @@ class ReflectionHelper {
 
     private static <T> Class<T> doPrivLoadClass(final Bundle bundle, final String className) {
         return AccessController.doPrivileged(new PrivilegedAction<Class<T>>() {
+            @Override
             public Class<T> run() {
                 return doLoadClass(bundle, className);
             }
@@ -92,6 +94,7 @@ class ReflectionHelper {
 
     private static Class<?>[] doPrivGetInterfaces(final Class<?> clazz) {
         return AccessController.doPrivileged(new PrivilegedAction<Class<?>[]>() {
+            @Override
             public Class<?>[] run() {
                 return doGetInterfaces(clazz);
             }
@@ -111,6 +114,7 @@ class ReflectionHelper {
 
     private static Method[] doPrivGetDeclaredMethods(final Class<?> clazz) {
         return AccessController.doPrivileged(new PrivilegedAction<Method[]>() {
+            @Override
             public Method[] run() {
                 return doGetDeclaredMethods(clazz);
             }
@@ -127,6 +131,7 @@ class ReflectionHelper {
 
     private static Method[] doPrivGetMethods(final Class<?> clazz) {
         return AccessController.doPrivileged(new PrivilegedAction<Method[]>() {
+            @Override
             public Method[] run() {
                 return doGetMethods(clazz);
             }
@@ -146,6 +151,7 @@ class ReflectionHelper {
 
     private static Constructor<?>[] doPrivGetConstructors(final Class<?> clazz) {
         return AccessController.doPrivileged(new PrivilegedAction<Constructor<?>[]>() {
+            @Override
             public Constructor<?>[] run() {
                 return doGetConstructors(clazz);
             }
@@ -165,6 +171,7 @@ class ReflectionHelper {
 
     private static Constructor<?>[] doPrivGetDeclaredConstructors(final Class<?> clazz) {
         return AccessController.doPrivileged(new PrivilegedAction<Constructor<?>[]>() {
+            @Override
             public Constructor<?>[] run() {
                 return doGetDeclaredConstructors(clazz);
             }
@@ -193,6 +200,7 @@ class ReflectionHelper {
 
     private static <T> T doPrivNewInstance(final Constructor<T> ctor, final Object... args) {
         return AccessController.doPrivileged(new PrivilegedAction<T>() {
+            @Override
             public T run() {
                 return doNewInstance(ctor, args);
             }
@@ -217,6 +225,7 @@ class ReflectionHelper {
 
     private static Field doPrivGetDeclaredField(final Class<?> clazz, final String fieldName) {
         return AccessController.doPrivileged(new PrivilegedAction<Field>() {
+            @Override
             public Field run() {
                 return doGetDeclaredField(clazz, fieldName);
             }
@@ -225,9 +234,7 @@ class ReflectionHelper {
 
     static Method getDeclaredMethod(final Class<?> clazz, final String methodName, final Class<?>... parameterTypes) {
         if (clazz != null) {
-            return securityEnabled ?
-                            doPrivGetDeclaredMethod(clazz, methodName, parameterTypes) :
-                            doGetDeclaredMethod(clazz, methodName, parameterTypes);
+            return securityEnabled ? doPrivGetDeclaredMethod(clazz, methodName, parameterTypes) : doGetDeclaredMethod(clazz, methodName, parameterTypes);
         }
         return null;
     }
@@ -237,12 +244,14 @@ class ReflectionHelper {
         try {
             method = clazz.getDeclaredMethod(methodName, parameterTypes);
         } catch (NoSuchMethodException e) {
+            e.printStackTrace();
         }
         return method;
     }
 
     private static Method doPrivGetDeclaredMethod(final Class<?> clazz, final String methodName, final Class<?>... parameterTypes) {
         return AccessController.doPrivileged(new PrivilegedAction<Method>() {
+            @Override
             public Method run() {
                 return doGetDeclaredMethod(clazz, methodName, parameterTypes);
             }
@@ -263,6 +272,7 @@ class ReflectionHelper {
 
     private static void doPrivSetAccessible(final AccessibleObject accessibleObject, final boolean visible) {
         AccessController.doPrivileged(new PrivilegedAction<Object>() {
+            @Override
             public Object run() {
                 doSetAccessible(accessibleObject, visible);
                 return null;
@@ -280,6 +290,7 @@ class ReflectionHelper {
 
     private static Annotation[] doPrivGetAnnotations(final AnnotatedElement annotatedElement) {
         return AccessController.doPrivileged(new PrivilegedAction<Annotation[]>() {
+            @Override
             public Annotation[] run() {
                 return doGetAnnotations(annotatedElement);
             }
