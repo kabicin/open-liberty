@@ -12,8 +12,6 @@ package com.ibm.ws.ras.instrument.internal.bci;
 
 import static com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter.TRACE_COMPONENT_TYPE;
 import static com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter.TR_TYPE;
-//import static com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter.BASE_TRACE_SERVICE_TYPE;
-//import static com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter.BASE_TRACE_SERVICE_SYSTEM_LOG_HOLDER_TYPE;
 import static org.objectweb.asm.Opcodes.ICONST_0;
 
 import java.util.Iterator;
@@ -47,7 +45,6 @@ public class LibertyTracingMethodAdapter extends AbstractRasMethodAdapter<Abstra
     }
 
     private void setModifiedMethod(boolean modified) {
-    	
         this.modifiedMethod = modified;
     }
 
@@ -174,7 +171,6 @@ public class LibertyTracingMethodAdapter extends AbstractRasMethodAdapter<Abstra
             return false;
         }
   
-        
         Label skipTraceLabel = new Label();
         visitInvokeTraceGuardMethod("isDebugEnabled", skipTraceLabel);
 

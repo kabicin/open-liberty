@@ -58,12 +58,7 @@ public class FFDCClassAdapter extends AbstractRasClassAdapter {
 	@Override
     public RasMethodAdapter createRasMethodAdapter(MethodVisitor mv, int access, String name, String descriptor, String signature, String[] exceptions) {
         return new FFDCMethodAdapter(this, mv, access, name, descriptor, signature, exceptions);
-    }
-	
-//	@Override
-	public MethodVisitor createThrowableRasMethodAdapter(MethodVisitor mv, int access, String name, String descriptor, String signature, String[] exceptions) {
-        return new FFDCMethodAdapter(this, mv, access, name, descriptor, signature, exceptions);
-    }
+	}
 
     @Override
     public AnnotationVisitor visitAnnotation(String desc, boolean visible) {

@@ -10,8 +10,6 @@
  *******************************************************************************/
 package com.ibm.ws.monitor.internal.bci;
 
-import java.lang.reflect.Method;
-
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -23,21 +21,15 @@ class ThrowableMethodAdapter extends MethodVisitor implements Opcodes {
     private final String name;
     private final String desc;
     private final String signature;
-    private final Method preThrow;
-    private final Method postThrow;
-    private final Object btsInstance;
 
     private boolean observedFirstInstruction = false;
     private boolean insidePST = false;
 
-    public ThrowableMethodAdapter(MethodVisitor mv, String name, String desc, String signature, Method preThrow, Method postThrow, Object btsInstance, String className) {
+    public ThrowableMethodAdapter(MethodVisitor mv, String name, String desc, String signature, String className) {
         super(ASM7, mv);
         this.name = name;
         this.desc = desc;
         this.signature = signature;
-        this.preThrow = preThrow;
-        this.postThrow = postThrow;
-        this.btsInstance = btsInstance;
         this.currentClass = className;
     }
 

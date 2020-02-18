@@ -76,7 +76,6 @@ public class ThreadPoolMonitor extends StatisticActions {
     @ProbeAtEntry
     @ProbeSite(clazz = "com.ibm.ws.threading.internal.ExecutorServiceImpl", method = "execute")
     public void atFieldGet(@This Object esi) {
-
         //We will be checking this only once.
         //Once we get ThreadPoolExecutorImpl for DEFAULT_POOL_NAME, we set ob_ref and won't execute any code here.
         if (ob_ref == null) {
@@ -118,13 +117,6 @@ public class ThreadPoolMonitor extends StatisticActions {
         }
 
     }
-
-//    @ProbeAtEntry
-//    @ProbeSite(clazz = "java.lang.Throwable", method = "printStackTrace")
-//    public void atPSTEntry() {
-//        System.out.println("PST ON ETNTER!!");
-//
-//    }
 
     /**
      * @param poolName

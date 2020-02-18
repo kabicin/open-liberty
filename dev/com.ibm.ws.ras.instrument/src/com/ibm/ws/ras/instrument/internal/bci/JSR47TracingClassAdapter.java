@@ -66,11 +66,6 @@ public class JSR47TracingClassAdapter extends AbstractTracingRasClassAdapter imp
     public RasMethodAdapter createRasMethodAdapter(MethodVisitor delegate, int access, String name, String descriptor, String signature, String[] exceptions) {
         return new JSR47TracingMethodAdapter(this, delegate, access, name, descriptor, signature, exceptions);
     }
-	
-//	@Override
-	public MethodVisitor createThrowableRasMethodAdapter(MethodVisitor mv, int access, String name, String descriptor, String signature, String[] exceptions) {
-        return new JSR47TracingMethodAdapter(this, mv, access, name, descriptor, signature, exceptions);
-    }
 
     @Override
     public String getTraceObjectFieldName() {

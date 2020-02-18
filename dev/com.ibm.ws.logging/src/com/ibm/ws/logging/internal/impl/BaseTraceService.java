@@ -137,10 +137,6 @@ public class BaseTraceService implements TrService {
     /** Special trace component for system streams: this one "remembers" the original system err */
     protected final SystemLogHolder systemErr;
 
-    protected final SystemLogHolder systemErrStackTrace;
-
-//    protected final SystemLogHolder systemErrStackTrace;
-
     public static final Object NULL_ID = null;
     public static final Logger NULL_LOGGER = null;
     public static final String NULL_FORMATTED_MSG = null;
@@ -259,7 +255,6 @@ public class BaseTraceService implements TrService {
     public BaseTraceService() {
         systemOut = new SystemLogHolder(LoggingConstants.SYSTEM_OUT, System.out);
         systemErr = new SystemLogHolder(LoggingConstants.SYSTEM_ERR, System.err);
-        systemErrStackTrace = new SystemLogHolder(LoggingConstants.SYSTEM_ERR, System.err);
 
         earlyMessageTraceKiller_Timer.schedule(new EarlyMessageTraceCleaner(), 5 * MINUTE); // 5 minutes wait time
     }
@@ -954,19 +949,14 @@ public class BaseTraceService implements TrService {
         } else {
             routedMessage = new RoutedMessageImpl(logRecord.getMessage(), logRecord.getMessage(), null, logRecord);
         }
-        boolean parsing = traceFlags.get().parsingStackTrace;
-        if (!parsing)
-            invokeMessageRouters(routedMessage);
-//        if (!parsing) {
+        invokeMessageRouters(routedMessage);
         if (logSource != null) {
             publishToLogSource(routedMessage);
         }
         //send events to handlers
-        if (!parsing && TraceComponent.isAnyTracingEnabled()) {
+        if (TraceComponent.isAnyTracingEnabled()) {
             publishTraceLogRecord(detailLog, logRecord, NULL_ID, NULL_FORMATTED_MSG, NULL_FORMATTED_MSG);
         }
-//        }
-
     }
 
     /**
@@ -2086,10 +2076,6 @@ public class BaseTraceService implements TrService {
             stackTraceFlags.isSuppressingTraces = false;
             stackTraceFlags.needsToOutputInternalPackageMarker = false;
         }
-
-//        if (txt != null && stackTraceFlags.parsingStackTrace) {
-//            stackTraceFlags.currentStackTrace.append(txt + "\n");
-//        }
         return txt;
     }
 

@@ -17,7 +17,6 @@ import java.io.StringWriter;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
-import java.lang.instrument.UnmodifiableClassException;
 import java.lang.ref.WeakReference;
 import java.security.ProtectionDomain;
 import java.util.Collections;
@@ -35,8 +34,6 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.logging.internal.NLSConstants;
 import com.ibm.ws.ras.instrument.internal.bci.LibertyTracingClassAdapter;
-import com.ibm.ws.ras.instrument.internal.bci.ThrowableClassAdapter;
-import com.ibm.ws.ras.instrument.internal.model.ThrowableInfo;
 
 
 /**
@@ -110,8 +107,6 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
     private static boolean skipDebugData = false;
     
     private static final Boolean isJDK8WithHotReplaceBug = LibertyJava8WorkaroundRuntimeTransformer.checkJDK8WithHotReplaceBug() ? Boolean.TRUE :  Boolean.FALSE;
-
-    private static ThrowableInfo throwableInfo;
     
     /**
      * Set the {@link java.lang.instrument.Instrumenation} instance to use for
@@ -179,16 +174,6 @@ public class LibertyRuntimeTransformer implements ClassFileTransformer {
           
             
             instrumentation.addTransformer(registeredTransformer, true);
-//            instrumentation.addTransformer(new ThrowableTransformer(new ThrowableInfo(instrumentation)), true);
-//            for (Class<?> clazz : instrumentation.getAllLoadedClasses()) {
-//                if(clazz.getName().equals("java.lang.Throwable")) {
-//                	try {
-//                		System.out.println("Transforming!!");
-//                        instrumentation.retransformClasses(clazz);
-//                    } catch (Throwable t) {
-//                    }
-//                }
-//            }
             
         }
 

@@ -40,8 +40,6 @@ public interface RasClassAdapter {
      */
     public RasMethodAdapter createRasMethodAdapter(MethodVisitor delegate, int access, String name, String descriptor, String signature, String[] exceptions);
 
-//    public MethodVisitor createThrowableRasMethodAdapter(MethodVisitor delegate, int access, String name, String descriptor, String signature, String[] exceptions);
-    
     /**
      * Determine whether or not the field that holds the trace object must
      * be declared.

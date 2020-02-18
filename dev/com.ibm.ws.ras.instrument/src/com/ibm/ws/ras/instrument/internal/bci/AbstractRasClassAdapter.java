@@ -252,7 +252,6 @@ public abstract class AbstractRasClassAdapter extends CheckInstrumentableClassAd
         MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
         if (isInstrumentableClass() && isInstrumentableMethod(access, name, descriptor)) {
             MethodVisitor rasMethodAdapter = createRasMethodAdapter(mv, access, name, descriptor, signature, exceptions);
-//        	MethodVisitor rasMethodAdapter = createThrowableRasMethodAdapter(mv, access, name, descriptor, signature, exceptions);
             mv = (rasMethodAdapter != null) ? rasMethodAdapter : mv;
         }
         return mv;
@@ -480,6 +479,5 @@ public abstract class AbstractRasClassAdapter extends CheckInstrumentableClassAd
             return Type.getType(traceObjectFieldAnnotationVisitor.getFieldDescriptor());
         }
         return null;
-    }
-   
+    } 
 }

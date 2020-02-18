@@ -59,18 +59,6 @@ public class LibertyTracePreprocessClassAdapter extends AbstractTracingRasClassA
         }
         return null;
     }
-    
-//    @Override
-	public MethodVisitor createThrowableRasMethodAdapter(MethodVisitor delegate, int access, String name, String descriptor, String signature, String[] exceptions) {
-    	 if (LOGGER_TYPE.equals(getTraceObjectFieldType())) {
-             return new JSR47TracingMethodAdapter(this, delegate, access, name, descriptor, signature, exceptions);
-         } else if (WebSphereTrTracingClassAdapter.TRACE_COMPONENT_TYPE.equals(getTraceObjectFieldType())) {
-             return new WebSphereTrTracingMethodAdapter(this, delegate, access, name, descriptor, signature, exceptions);
-         } else if (LibertyTracingClassAdapter.TRACE_COMPONENT_TYPE.equals(getTraceObjectFieldType()) && "<clinit>".equals(name)) {
-             return new LibertyTracingMethodAdapter(this, false, delegate, access, name, descriptor, signature, exceptions);
-         }
-         return null;
-    }
 
     @Override
     public String getTraceObjectFieldName() {

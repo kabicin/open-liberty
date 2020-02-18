@@ -19,21 +19,13 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 
-import com.ibm.ws.monitor.internal.ThrowableInfo;
-
 public class ThrowableTransformer implements ClassFileTransformer {
 
     final String BASE_TRACE_SERVICE_CLASS_NAME = "com.ibm.ws.logging.internal.impl.BaseTraceService";
     final String THROWABLE_AT_ENTRY_CLASS_NAME = "com.ibm.ws.ras.instrument.annotation.ThrowableAtEntry";
     final String THROWABLE_AT_RETURN_CLASS_NAME = "com.ibm.ws.ras.instrument.annotation.ThrowableAtReturn";
 
-    private final ThrowableInfo throwableInfo;
-
     private static Instrumentation inst = null;
-
-    public ThrowableTransformer(ThrowableInfo throwableInfo) {
-        this.throwableInfo = throwableInfo;
-    }
 
     @Override
     public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
@@ -53,7 +45,7 @@ public class ThrowableTransformer implements ClassFileTransformer {
         ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES);
         ClassVisitor visitor = writer;
         if (nameOfClass.equals("java/lang/Throwable")) {
-            visitor = new ThrowableClassAdapter(visitor, throwableInfo);
+            visitor = new ThrowableClassAdapter(visitor);
         }
         reader.accept(visitor, reader.SKIP_FRAMES);
         return writer.toByteArray();

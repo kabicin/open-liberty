@@ -23,7 +23,6 @@ public class JSR47TracingMethodAdapter extends AbstractRasMethodAdapter<Abstract
 
     @Override
     public boolean onMethodEntry() {
-
         if (isTrivial() || isAlreadyTraced()) {
             return false;
         }
