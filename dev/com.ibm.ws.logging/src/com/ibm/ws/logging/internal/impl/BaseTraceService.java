@@ -49,6 +49,8 @@ import com.ibm.ws.logging.RoutedMessage;
 import com.ibm.ws.logging.WsLogHandler;
 import com.ibm.ws.logging.WsMessageRouter;
 import com.ibm.ws.logging.WsTraceRouter;
+import com.ibm.ws.logging.annotation.ThrowableAtMethod;
+import com.ibm.ws.logging.annotation.ThrowableAtMethodInner;
 import com.ibm.ws.logging.collector.CollectorConstants;
 import com.ibm.ws.logging.data.AccessLogData;
 import com.ibm.ws.logging.data.AuditData;
@@ -231,6 +233,15 @@ public class BaseTraceService implements TrService {
         boolean needsToOutputInternalPackageMarker = false;
         boolean isSuppressingTraces = false;
     }
+
+    private static ByteArrayOutputStream baos;
+    private static PrintStream ps;
+    private static ThreadLocal<Boolean> isPrintingStackTrace = new ThreadLocal<Boolean>() {
+        @Override
+        protected Boolean initialValue() {
+            return Boolean.FALSE;
+        }
+    };
 
     /** Track the stack trace printing activity of the current thread */
     private static ThreadLocal<StackTraceFlags> traceFlags = new ThreadLocal<StackTraceFlags>() {
@@ -1740,7 +1751,7 @@ public class BaseTraceService implements TrService {
         public synchronized void flush() throws IOException {
 
             /*
-             * sPrinting is a ThreadLocal that is set to disable flushing while printing.
+             * isPrinting is a ThreadLocal that is set to disable flushing while printing.
              * This helps us ignore flush requests that the JDK automatically creates in the middle of printing large (>8k) strings.
              * We want the whole String to be flushed in one shot for benefit of downstream event consumers.
              */
@@ -1808,6 +1819,56 @@ public class BaseTraceService implements TrService {
             txt = "[err] " + txt;
         }
         holder.originalStream.println(txt);
+    }
+
+    /**
+     * Overrides printStackTrace() with our own PrintStream object.
+     *
+     * @param t the throwable object to manipulate
+     */
+    @ThrowableAtMethod(name = "printStackTrace", desc = "()V")
+    public void printStackTraceMethod(Throwable t) {
+        printStackTraceOverride(t);
+    }
+
+    /**
+     * Overrides printStackTrace(PrintStream) to redirect to our own PrintStream object
+     * if it has not been overridden before (by printStackTraceBody)
+     *
+     * @param t the throwable object to manipulate
+     * @return overrides printStackTrace(PrintStream ps) if true, otherwise uses the default implementation
+     */
+    @ThrowableAtMethodInner(name = "printStackTrace", desc = "(Ljava/io/PrintStream;)V")
+    public boolean printStackTraceInnerMethod(Throwable t) {
+        if (!isPrintingStackTrace.get()) {
+            printStackTraceOverride(t);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Redirects printStackTrace into our own ByteArrayOutputStream and returns it as one string
+     *
+     * @param t the throwable to manipulate
+     */
+    private void printStackTraceOverride(Throwable t) {
+        baos = new ByteArrayOutputStream();
+        ps = new PrintStream(baos);
+        isPrintingStackTrace.set(true);
+        t.printStackTrace(ps);
+        isPrintingStackTrace.set(false);
+        String[] rawStackTrace = baos.toString().split("\\r?\\n");
+        StringBuilder filteredStackTrace = new StringBuilder();
+        String trace;
+        for (int i = 0; i < rawStackTrace.length; i++) {
+            if ((trace = BaseTraceService.filterStackTraces(rawStackTrace[i])) != null) {
+                filteredStackTrace.append(trace + "\n");
+            }
+        }
+        if (filteredStackTrace.length() > 0) {
+            System.err.println(filteredStackTrace.toString());
+        }
     }
 
     /**
