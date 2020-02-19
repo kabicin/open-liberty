@@ -115,9 +115,9 @@ public class MonitoringProxyActivator {
     /**
      * Construct a new proxy activator.
      *
-     * @param bundleContext    the {@link BundleContext} of the owning bundle
+     * @param bundleContext the {@link BundleContext} of the owning bundle
      * @param probeManagerImpl the owning {@link ProbeManagerImpl}
-     * @param instrumentation  the java {@link Instrumentation} service reference
+     * @param instrumentation the java {@link Instrumentation} service reference
      */
     MonitoringProxyActivator(BundleContext bundleContext, ProbeManagerImpl probeManagerImpl, Instrumentation instrumentation) {
         this.bundleContext = bundleContext;
@@ -264,7 +264,7 @@ public class MonitoringProxyActivator {
      * Create the jar directory entries corresponding to the specified package
      * name.
      *
-     * @param jarStream   the target jar's output stream
+     * @param jarStream the target jar's output stream
      * @param packageName the target package name
      *
      * @throws IOException if an IO exception raised while creating the entries
@@ -316,8 +316,7 @@ public class MonitoringProxyActivator {
         InputStream inputStream = classUrl.openStream();
 
         ClassReader reader = new ClassReader(inputStream);
-        reader.accept(new ClassVisitor(Opcodes.ASM7) {
-        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        reader.accept(new ClassVisitor(Opcodes.ASM7) {}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         inputStream.close();
 
         return reader.getClassName();
@@ -328,7 +327,7 @@ public class MonitoringProxyActivator {
      * class across packages.
      *
      * @param sourceInternalName the internal name of the template class
-     * @param targetPackage      the package to move the class to
+     * @param targetPackage the package to move the class to
      *
      * @return the target class name
      */
@@ -455,4 +454,5 @@ public class MonitoringProxyActivator {
     public void classAvailable(Class<?> clazz) {
         probeManagerImpl.classAvailable(clazz);
     }
+
 }

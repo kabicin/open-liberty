@@ -463,7 +463,7 @@ public class BaseTraceFormatter extends Formatter {
         String sym = getMarker(logRecord);
         String name = null;
         if (logRecord.getLoggerName() != null && (logRecord.getLoggerName().equals(SYSOUT) ||
-                                                 logRecord.getLoggerName().equals(SYSERR)))
+                                                  logRecord.getLoggerName().equals(SYSERR)))
             name = nonNullString(logRecord.getLoggerName(), null);
         else
             name = nonNullString(logRecord.getLoggerName(), logRecord.getSourceClassName());

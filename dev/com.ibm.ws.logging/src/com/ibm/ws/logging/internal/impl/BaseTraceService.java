@@ -49,6 +49,7 @@ import com.ibm.ws.logging.RoutedMessage;
 import com.ibm.ws.logging.WsLogHandler;
 import com.ibm.ws.logging.WsMessageRouter;
 import com.ibm.ws.logging.WsTraceRouter;
+import com.ibm.ws.logging.annotation.ThrowableAtMethod;
 import com.ibm.ws.logging.collector.CollectorConstants;
 import com.ibm.ws.logging.data.AccessLogData;
 import com.ibm.ws.logging.data.AuditData;
@@ -230,6 +231,7 @@ public class BaseTraceService implements TrService {
     private static class StackTraceFlags {
         boolean needsToOutputInternalPackageMarker = false;
         boolean isSuppressingTraces = false;
+        boolean isPrintingStackTrace = false;
     }
 
     /** Track the stack trace printing activity of the current thread */
@@ -934,16 +936,19 @@ public class BaseTraceService implements TrService {
         // Tee to messages.log (always)
 
         RoutedMessage routedMessage = null;
+
         if (externalMessageRouter.get() != null) {
             String message = formatter.messageLogFormat(logRecord, logRecord.getMessage());
             routedMessage = new RoutedMessageImpl(logRecord.getMessage(), logRecord.getMessage(), message, logRecord);
         } else {
             routedMessage = new RoutedMessageImpl(logRecord.getMessage(), logRecord.getMessage(), null, logRecord);
         }
+
         invokeMessageRouters(routedMessage);
         if (logSource != null) {
             publishToLogSource(routedMessage);
         }
+
         //send events to handlers
         if (TraceComponent.isAnyTracingEnabled()) {
             publishTraceLogRecord(detailLog, logRecord, NULL_ID, NULL_FORMATTED_MSG, NULL_FORMATTED_MSG);
@@ -1695,7 +1700,7 @@ public class BaseTraceService implements TrService {
         public synchronized void println(String s) {
             TrOutputStream.isPrinting.set(true);
             try {
-                super.print(s);
+                super.println(s);
             } finally {
                 TrOutputStream.isPrinting.set(false);
                 super.flush();
@@ -1706,7 +1711,7 @@ public class BaseTraceService implements TrService {
         public synchronized void println(Object obj) {
             TrOutputStream.isPrinting.set(true);
             try {
-                super.print(obj);
+                super.println(obj);
             } finally {
                 TrOutputStream.isPrinting.set(false);
                 super.flush();
@@ -1740,11 +1745,11 @@ public class BaseTraceService implements TrService {
         public synchronized void flush() throws IOException {
 
             /*
-             * sPrinting is a ThreadLocal that is set to disable flushing while printing.
+             * isPrinting is a ThreadLocal that is set to disable flushing while printing.
              * This helps us ignore flush requests that the JDK automatically creates in the middle of printing large (>8k) strings.
              * We want the whole String to be flushed in one shot for benefit of downstream event consumers.
              */
-            if (isPrinting.get())
+            if (isPrinting.get() || traceFlags.get().isPrintingStackTrace)
                 return;
 
             super.flush();
@@ -1767,7 +1772,6 @@ public class BaseTraceService implements TrService {
 
             LogRecord logRecord = new LogRecord(holder, entry);
             logRecord.setLoggerName(holder.getName());
-
             service.echo(holder, logRecord);
         }
     }
@@ -1810,6 +1814,39 @@ public class BaseTraceService implements TrService {
         holder.originalStream.println(txt);
     }
 
+    @ThrowableAtMethod
+    public boolean printStackTraceOverride(Throwable t, PrintStream originalStream) {
+        if ((originalStream == System.err || originalStream == System.out) && !traceFlags.get().isPrintingStackTrace) {
+            traceFlags.get().isPrintingStackTrace = true;
+            t.printStackTrace(originalStream);
+            traceFlags.get().isPrintingStackTrace = false;
+            originalStream.flush();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Trim multi or single line stack traces
+     */
+    public static String filterStackTraces(String txt) {
+        String[] lines = txt.split("\\r?\\n");
+        if (lines.length > 1) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < lines.length; i++) {
+                String filteredLine = filterStackTracesOriginal(lines[i]);
+                if (filteredLine != null) {
+                    sb.append(filteredLine);
+                    if (i != lines.length - 1) {
+                        sb.append("\n");
+                    }
+                }
+            }
+            return sb.toString();
+        }
+        return filterStackTracesOriginal(txt);
+    }
+
     /**
      * Trim stack traces. This isn't as sophisticated as what TruncatableThrowable
      * does, since pass through all code except code which is clearly IBM-internal.
@@ -1831,7 +1868,7 @@ public class BaseTraceService implements TrService {
      * @return null if the stack trace should be suppressed, or an indicator we're suppressing,
      *         or maybe the original stack trace
      */
-    public static String filterStackTraces(String txt) {
+    public static String filterStackTracesOriginal(String txt) {
         // Check for stack traces, which we may want to trim
         StackTraceFlags stackTraceFlags = traceFlags.get();
         // We have a little thread-local state machine here with four states controlled by two
