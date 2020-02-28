@@ -32,7 +32,6 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.SimpleRemapper;
 import org.osgi.framework.Bundle;
@@ -41,7 +40,6 @@ import org.osgi.service.component.ComponentException;
 
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
 import com.ibm.ws.monitor.internal.bci.ProbeMethodAdapter;
-import com.ibm.ws.monitor.internal.bci.ThrowableTransformer;
 import com.ibm.ws.monitor.internal.bci.remap.AddVersionFieldClassAdapter;
 import com.ibm.ws.monitor.internal.boot.templates.ClassAvailableProxy;
 import com.ibm.ws.monitor.internal.boot.templates.ProbeProxy;
@@ -128,7 +126,7 @@ public class MonitoringProxyActivator {
     /**
      * Holds java.lang.reflect.Method data to be invoked before and after a java.lang.Throwable call to printStackTrace
      */
-    public static ThrowableInfo throwableInfo;
+//    public static ThrowableInfo throwableInfo;
 
     /**
      * Construct a new proxy activator.
@@ -167,26 +165,26 @@ public class MonitoringProxyActivator {
             instrumentation.appendToBootstrapClassLoaderSearch(proxyJar);
         }
 
-        throwableInfo = new ThrowableInfo(this.instrumentation);
+//        throwableInfo = new ThrowableInfo(this.instrumentation);
 
         // Hook up the proxies
         activateProbeProxyTarget();
         activateClassAvailableProxyTarget();
 
-        activateThrowableProxyEnterTarget();
-        activateThrowableProxyReturnTarget();
+//        activateThrowableProxyEnterTarget();
+//        activateThrowableProxyReturnTarget();
 
         // now that the Throwable Proxy is activated, transform the Throwable class.
-        this.instrumentation.addTransformer(new ThrowableTransformer(), true);
-        for (Class<?> clazz : this.instrumentation.getAllLoadedClasses()) {
-            if (clazz.getName().equals("java.lang.Throwable")) {
-                try {
-                    this.instrumentation.retransformClasses(clazz);
-                } catch (Throwable t) {
-                    t.printStackTrace();
-                }
-            }
-        }
+//        this.instrumentation.addTransformer(new ThrowableTransformer(), true);
+//        for (Class<?> clazz : this.instrumentation.getAllLoadedClasses()) {
+//            if (clazz.getName().equals("java.lang.Throwable")) {
+//                try {
+//                    this.instrumentation.retransformClasses(clazz);
+//                } catch (Throwable t) {
+//                    t.printStackTrace();
+//                }
+//            }
+//        }
     }
 
     /**
@@ -198,7 +196,7 @@ public class MonitoringProxyActivator {
         try {
             deactivateClassAvailableProxyTarget();
             deactivateProbeProxyTarget();
-            deactivateThrowableProxyTarget();
+//            deactivateThrowableProxyTarget();
         } catch (Exception e) {
             throw new ComponentException(e);
         }
@@ -432,9 +430,9 @@ public class MonitoringProxyActivator {
                                                            ProbeMethodAdapter.FIRE_PROBE_METHOD_NAME,
                                                            long.class, Object.class, Object.class, Object.class);
         ReflectionHelper.setAccessible(method, true);
-        if (!Type.getMethodDescriptor(method).equals(ProbeMethodAdapter.FIRE_PROBE_METHOD_DESC)) {
-            throw new IncompatibleClassChangeError("Proxy method signature does not match byte code");
-        }
+//        if (!Type.getMethodDescriptor(method).equals(ProbeMethodAdapter.FIRE_PROBE_METHOD_DESC)) {
+//            throw new IncompatibleClassChangeError("Proxy method signature does not match byte code");
+//        }
         findProbeProxySetFireProbeTargetMethod().invoke(null, probeManagerImpl, method);
     }
 
@@ -541,29 +539,29 @@ public class MonitoringProxyActivator {
      * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
      *
      */
-    public void fireThrowableOnEnter() {
-        Method method = throwableInfo.getPreThrow();
-        try {
-            method.invoke(throwableInfo.getBtsInstance());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    /**
-     * Invokes the getPostThrow Method on a BaseTraceService instance.
-     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
-     *
-     */
-    public void fireThrowableOnReturn() {
-        Method method = throwableInfo.getPostThrow();
-        try {
-            method.invoke(throwableInfo.getBtsInstance());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
+//    public void fireThrowableOnEnter() {
+//        Method method = throwableInfo.getPreThrow();
+//        try {
+//            method.invoke(throwableInfo.getBtsInstance());
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//
+//    }
+//
+//    /**
+//     * Invokes the getPostThrow Method on a BaseTraceService instance.
+//     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
+//     *
+//     */
+//    public void fireThrowableOnReturn() {
+//        Method method = throwableInfo.getPostThrow();
+//        try {
+//            method.invoke(throwableInfo.getBtsInstance());
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//
+//    }
 
 }

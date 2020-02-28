@@ -12,16 +12,20 @@
 package com.ibm.ws.logging.internal.osgi;
 
 import java.lang.instrument.Instrumentation;
+import java.lang.reflect.Method;
+import java.util.jar.JarFile;
 
 import org.eclipse.equinox.log.ExtendedLogReaderService;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.osgi.service.component.ComponentException;
 import org.osgi.framework.ServiceReference;
 import org.osgi.service.log.LogReaderService;
 
 import com.ibm.websphere.ras.TrConfigurator;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.TraceComponentChangeListener;
+import com.ibm.ws.logging.internal.osgi.bci.ThrowableInfo;
 import com.ibm.ws.ras.instrument.internal.main.LibertyJava8WorkaroundRuntimeTransformer;
 import com.ibm.ws.ras.instrument.internal.main.LibertyRuntimeTransformer;
 
@@ -95,6 +99,12 @@ public class Activator implements BundleActivator {
      */
     @Override
     public void stop(BundleContext context) throws Exception {
+    	System.err.println("Shutting down this bundle");
+//    	try {
+//    		throwableProxyActivator.deactivate();
+//    	} catch (Exception e) {
+//    		e.printStackTrace();
+//    	}
         msgRouter.stop();
         traceRouter.stop();
 
@@ -119,5 +129,4 @@ public class Activator implements BundleActivator {
             //it's not doing dynamic injection.
         }
     }
-
 }
