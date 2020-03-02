@@ -49,6 +49,9 @@ public class ThrowableClassFileTransformer implements ClassFileTransformer {
         if (nameOfClass.equals("java/lang/Throwable")) {
             visitor = new ThrowableClassAdapter(visitor);
         }
+        if (nameOfClass.contains("PackageProcessor")) {
+        	System.out.println("Found It: " + nameOfClass);
+        }
         reader.accept(visitor, reader.SKIP_FRAMES);
         return writer.toByteArray();
     }

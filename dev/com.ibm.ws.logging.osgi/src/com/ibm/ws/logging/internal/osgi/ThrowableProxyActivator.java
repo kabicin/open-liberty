@@ -19,7 +19,6 @@ import java.util.jar.Manifest;
 
 import com.ibm.ws.logging.internal.osgi.bci.AddVersionFieldClassAdapter;
 import com.ibm.ws.logging.internal.osgi.bci.ThrowableClassFileTransformer;
-import com.ibm.ws.logging.internal.osgi.bci.ThrowableInfo;
 import com.ibm.ws.logging.internal.osgi.boot.templates.ThrowableProxy;
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
 
@@ -35,15 +34,15 @@ import org.osgi.framework.Bundle;
 import org.osgi.service.component.ComponentException;
 
 public class ThrowableProxyActivator {
-	
-	private ThrowableInfo throwableInfo;
+
 	private Instrumentation inst;
 	private BundleContext bundleContext;
 	
 	/**
      * The target package for the boot loader delegated classes.
      */
-    public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.boot.delegated.monitoring";
+//    public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.boot.delegated.monitoring";
+	public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.logging.internal.osgi.boot.templates";
     
     /**
      * The bundle entry path prefix to the template classes.
@@ -104,10 +103,10 @@ public class ThrowableProxyActivator {
         
         // instantiate throwable info
         System.out.println("Instantiated throwable info");
-        throwableInfo = new ThrowableInfo(inst);
+  
         
-        activateThrowableProxyEnterTarget();
-        activateThrowableProxyReturnTarget();
+//        activateThrowableProxyEnterTarget();
+//        activateThrowableProxyReturnTarget();
         
         
 		inst.addTransformer(new ThrowableClassFileTransformer(), true);
@@ -124,11 +123,6 @@ public class ThrowableProxyActivator {
 	}
 	
 	protected void deactivate() throws Exception {
-        try {
-            deactivateThrowableProxyTarget();
-        } catch (Exception e) {
-            throw new Exception(e);
-        }
     }
 	
 	/**
@@ -305,6 +299,15 @@ public class ThrowableProxyActivator {
     }
     
     /**
+     * Get the host bundle's version string.
+     *
+     * @return the host bundle's version string
+     */
+    String getCurrentVersion() {
+        return bundleContext.getBundle().getVersion().toString();
+    }
+    
+    /**
      * Create the {@code Manifest} for the boot proxy jar.
      *
      * @return the boot proxy jar {@code Manifest}
@@ -319,89 +322,5 @@ public class ThrowableProxyActivator {
         manifestAttributes.putValue(MONITORING_VERSION_MANIFEST_HEADER, getCurrentVersion());
 
         return manifest;
-    }
-    
-    /**
-     * Get the host bundle's version string.
-     *
-     * @return the host bundle's version string
-     */
-    String getCurrentVersion() {
-        return bundleContext.getBundle().getVersion().toString();
-    }
-	
-    /**
-     * Binds the MonitoringProxyActivator class' fireThrowableOnEnter method to the ThrowableProxy.
-     *
-     * @throws Exception the method invocation exception
-     */
-    void activateThrowableProxyEnterTarget() throws Exception {
-        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnEnter");
-        ReflectionHelper.setAccessible(method, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, this, method, true);
-    }
-
-    /**
-     * Binds the MonitoringProxyActivator class' fireThrowableOnReturn method to the ThrowableProxy.
-     *
-     * @throws Exception the method invocation exception
-     */
-    void activateThrowableProxyReturnTarget() throws Exception {
-        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnReturn");
-        ReflectionHelper.setAccessible(method, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, this, method, false);
-    }
-
-    /**
-     * Returns the Method object representing a target setter method for the ThrowableProxy.
-     *
-     * @return
-     * @throws Exception
-     */
-    Method findThrowableProxySetFireTargetMethod() throws Exception {
-        Class<?> proxyClass = Class.forName(THROWABLE_PROXY_CLASS_NAME);
-        Method method = ReflectionHelper.getDeclaredMethod(proxyClass, "setFireTarget", Object.class, Method.class, boolean.class);
-        ReflectionHelper.setAccessible(method, true);
-        return method;
-    }
-
-    /**
-     * Unbinds the MonitoringProxyActivator class' fireThrowableOnEnter and fireThrowableOnReturn methods from the ThrowableProxy.
-     *
-     * @throws Exception
-     */
-    void deactivateThrowableProxyTarget() throws Exception {
-        findThrowableProxySetFireTargetMethod().invoke(null, null, null, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, null, null, false);
-    }
-
-    /**
-     * Invokes the getPreThrow Method on a BaseTraceService instance.
-     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
-     *
-     */
-    public void fireThrowableOnEnter() {
-        Method method = throwableInfo.getPreThrow();
-        try {
-            method.invoke(throwableInfo.getBtsInstance());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    /**
-     * Invokes the getPostThrow Method on a BaseTraceService instance.
-     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
-     *
-     */
-    public void fireThrowableOnReturn() {
-        Method method = throwableInfo.getPostThrow();
-        try {
-            method.invoke(throwableInfo.getBtsInstance());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
     }
 }

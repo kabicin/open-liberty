@@ -28,7 +28,7 @@ Import-Package: \
     *
    
 Export-Package: \
-    com.ibm.ws.logging.osgi.*;provide:=true
+    com.ibm.ws.logging.osgi;provide:=true
 
 -includeresource: \
     OSGI-INF=resources/OSGI-INF
@@ -38,10 +38,10 @@ Service-Component= \
     scheduler=java.util.concurrent.ScheduledExecutorService; \
     implementation:=com.ibm.ws.logging.internal.osgi.FFDCJanitor \
   com.ibm.ws.logging.internal.osgi.ThrowableProxyComponent; \
-        implementation:="com.ibm.ws.logging.internal.osgi.ThrowableProxyComponent"; \
-        instrumentation=java.lang.instrument.Instrumentation; \
-        properties:="service.vendor=IBM"; \
-        version:=1.1, \
+    implementation:="com.ibm.ws.logging.internal.osgi.ThrowableProxyComponent"; \
+    instrumentation=java.lang.instrument.Instrumentation; \
+    properties:="service.vendor=IBM"; \
+    version:=1.1, \
    
 IBM-Default-Config: OSGI-INF/wlp/defaultInstances.xml
 
@@ -57,7 +57,7 @@ instrument.disabled: true
 	com.ibm.ws.logging;version=latest,\
 	com.ibm.ws.ras.instrument;version=latest, \
 	com.ibm.ws.org.objectweb.asm;version=latest,\
-	com.ibm.ws.org.osgi.annotation.versioning;version=latest
+	com.ibm.ws.org.osgi.annotation.versioning;version=latest,\
 
 -testpath: \
 	../build.sharedResources/lib/junit/old/junit.jar;version=file, \
