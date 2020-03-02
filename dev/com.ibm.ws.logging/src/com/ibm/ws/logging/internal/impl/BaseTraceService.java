@@ -49,8 +49,6 @@ import com.ibm.ws.logging.RoutedMessage;
 import com.ibm.ws.logging.WsLogHandler;
 import com.ibm.ws.logging.WsMessageRouter;
 import com.ibm.ws.logging.WsTraceRouter;
-import com.ibm.ws.logging.annotation.ThrowableAtEntry;
-import com.ibm.ws.logging.annotation.ThrowableAtReturn;
 import com.ibm.ws.logging.collector.CollectorConstants;
 import com.ibm.ws.logging.data.AccessLogData;
 import com.ibm.ws.logging.data.AuditData;
@@ -197,9 +195,6 @@ public class BaseTraceService implements TrService {
     /** A PrintStream that tees to the original System.err and to our logs. */
     protected TeePrintStream teeErr = null;
 
-    /** A SuspendedPrintStream that ignores all prints to System.err, and instead sends its data to the traceFlags ThreadLocal. */
-    protected SuspendedPrintStream suspendedErr = null;
-
     /** The header written at the beginning of all log files. */
     private String logHeader;
     /** True if java.lang.instrument is available for trace. */
@@ -235,12 +230,16 @@ public class BaseTraceService implements TrService {
     private static class StackTraceFlags {
         boolean needsToOutputInternalPackageMarker = false;
         boolean isSuppressingTraces = false;
-
-        // flags for the SuspendedPrintStream
-        boolean parsingStackTrace = false;
-        StringBuilder rawStackTrace = new StringBuilder();
-        StringBuilder filteredStackTrace = new StringBuilder();
     }
+
+    private static ByteArrayOutputStream baos;
+    private static PrintStream ps;
+    private static ThreadLocal<Boolean> isPrintingStackTrace = new ThreadLocal<Boolean>() {
+        @Override
+        protected Boolean initialValue() {
+            return Boolean.FALSE;
+        }
+    };
 
     /** Track the stack trace printing activity of the current thread */
     private static ThreadLocal<StackTraceFlags> traceFlags = new ThreadLocal<StackTraceFlags>() {
@@ -1725,157 +1724,6 @@ public class BaseTraceService implements TrService {
 
     }
 
-    public final static class SuspendedPrintStream extends PrintStream {
-        protected final TrOutputStream trStream;
-
-        public SuspendedPrintStream(TrOutputStream trStream, boolean autoFlush) {
-            super(trStream, autoFlush);
-            this.trStream = trStream;
-        }
-
-        @Override
-        public synchronized void print(boolean b) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(b);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(char c) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(c);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(int i) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(i);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(long l) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(l);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(float f) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(f);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(double d) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(d);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(char c[]) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(c);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(String s) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(s);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void print(Object obj) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(obj);
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println() {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(boolean b) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(b);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(char c) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(c);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(int i) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(i);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(long l) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(l);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(float f) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(f);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(double d) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(d);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(char c[]) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(c);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(String s) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(s);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-
-        @Override
-        public synchronized void println(Object obj) {
-            StackTraceFlags stf = traceFlags.get();
-            stf.rawStackTrace.append(obj);
-            stf.rawStackTrace.append("\n");
-            traceFlags.set(stf);
-        }
-    }
-
     /**
      * Use a byte array output stream to capture data written to system out or
      * system err. When flush is called on the stream, a method
@@ -1969,49 +1817,6 @@ public class BaseTraceService implements TrService {
             txt = "[err] " + txt;
         }
         holder.originalStream.println(txt);
-    }
-
-    /**
-     * Invoked via the ThrowableProxy class by MonitoringProxyActivator, upon entering a java.lang.Throwable
-     * printStackTrace call. All print calls to the error stream will be redirected to a StringBuilder
-     * in the traceFlags ThreadLocal.
-     *
-     */
-    @ThrowableAtEntry(method = "printStackTrace")
-    public void printStackTraceOnEnter() {
-        suspendedErr = new SuspendedPrintStream(new TrOutputStream(systemErr, this), false);
-        System.setErr(suspendedErr);
-    }
-
-    /**
-     * Invoked via the ThrowableProxy class by MonitoringProxyActivator, upon returning from a java.lang.Throwable
-     * printStackTrace call. All print calls populated into the traceFlags ThreadLocal are filtered and written
-     * back to the default error stream as one event.
-     *
-     */
-    @ThrowableAtReturn(method = "printStackTrace")
-    public void printStackTraceOnReturn() {
-        // Return to the default error stream
-        System.setErr(systemErr.getOriginalStream());
-
-        // Filter raw stack traces into another StringBuilder object
-        StackTraceFlags stf = traceFlags.get();
-        String[] rawStackTrace = stf.rawStackTrace.toString().split("\\r?\\n");
-        String trace;
-        for (int i = 0; i < rawStackTrace.length; i++) {
-            if ((trace = BaseTraceService.filterStackTraces(rawStackTrace[i])) != null) {
-                stf.filteredStackTrace.append(trace + "\n");
-            }
-        }
-        String finalStackTrace = stf.filteredStackTrace.toString();
-        if (finalStackTrace.length() > 0) {
-            System.err.println(stf.filteredStackTrace.toString());
-        }
-
-        // clear the ThreadLocal StringBuffers in case they are reused later
-        stf.rawStackTrace.setLength(0);
-        stf.filteredStackTrace.setLength(0);
-        traceFlags.set(stf);
     }
 
     /**

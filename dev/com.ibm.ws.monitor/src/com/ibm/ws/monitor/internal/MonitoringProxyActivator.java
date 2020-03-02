@@ -43,7 +43,6 @@ import com.ibm.ws.monitor.internal.bci.ProbeMethodAdapter;
 import com.ibm.ws.monitor.internal.bci.remap.AddVersionFieldClassAdapter;
 import com.ibm.ws.monitor.internal.boot.templates.ClassAvailableProxy;
 import com.ibm.ws.monitor.internal.boot.templates.ProbeProxy;
-import com.ibm.ws.monitor.internal.boot.templates.ThrowableProxy;
 
 /**
  * Component that is responsible for generating and installing the
@@ -79,17 +78,6 @@ public class MonitoringProxyActivator {
      * The internal name of the {@link ClassAvailableProxy} class.
      */
     public final static String CLASS_AVAILABLE_PROXY_CLASS_INTERNAL_NAME = CLASS_AVAILABLE_PROXY_CLASS_NAME.replaceAll("\\.", "/");
-
-    /**
-     * The name of the {@link ThrowableProxy} class that needs to be
-     * made available on the bootstrap class loader.
-     */
-    public final static String THROWABLE_PROXY_CLASS_NAME = BOOT_DELEGATED_PACKAGE + "." + ThrowableProxy.class.getSimpleName();
-
-    /**
-     * The internal name of the {@link ThrowableProxy} class.
-     */
-    public final static String THROWABLE_PROXY_CLASS_INTERNAL_NAME = THROWABLE_PROXY_CLASS_NAME.replaceAll("\\.", "/");
 
     /**
      * The bundle entry path prefix to the template classes.
@@ -165,26 +153,9 @@ public class MonitoringProxyActivator {
             instrumentation.appendToBootstrapClassLoaderSearch(proxyJar);
         }
 
-//        throwableInfo = new ThrowableInfo(this.instrumentation);
-
         // Hook up the proxies
         activateProbeProxyTarget();
         activateClassAvailableProxyTarget();
-
-//        activateThrowableProxyEnterTarget();
-//        activateThrowableProxyReturnTarget();
-
-        // now that the Throwable Proxy is activated, transform the Throwable class.
-//        this.instrumentation.addTransformer(new ThrowableTransformer(), true);
-//        for (Class<?> clazz : this.instrumentation.getAllLoadedClasses()) {
-//            if (clazz.getName().equals("java.lang.Throwable")) {
-//                try {
-//                    this.instrumentation.retransformClasses(clazz);
-//                } catch (Throwable t) {
-//                    t.printStackTrace();
-//                }
-//            }
-//        }
     }
 
     /**
@@ -488,80 +459,5 @@ public class MonitoringProxyActivator {
     public void classAvailable(Class<?> clazz) {
         probeManagerImpl.classAvailable(clazz);
     }
-
-    /**
-     * Binds the MonitoringProxyActivator class' fireThrowableOnEnter method to the ThrowableProxy.
-     *
-     * @throws Exception the method invocation exception
-     */
-    void activateThrowableProxyEnterTarget() throws Exception {
-        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnEnter");
-        ReflectionHelper.setAccessible(method, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, this, method, true);
-    }
-
-    /**
-     * Binds the MonitoringProxyActivator class' fireThrowableOnReturn method to the ThrowableProxy.
-     *
-     * @throws Exception the method invocation exception
-     */
-    void activateThrowableProxyReturnTarget() throws Exception {
-        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnReturn");
-        ReflectionHelper.setAccessible(method, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, this, method, false);
-    }
-
-    /**
-     * Returns the Method object representing a target setter method for the ThrowableProxy.
-     *
-     * @return
-     * @throws Exception
-     */
-    Method findThrowableProxySetFireTargetMethod() throws Exception {
-        Class<?> proxyClass = Class.forName(THROWABLE_PROXY_CLASS_NAME);
-        Method method = ReflectionHelper.getDeclaredMethod(proxyClass, "setFireTarget", Object.class, Method.class, boolean.class);
-        ReflectionHelper.setAccessible(method, true);
-        return method;
-    }
-
-    /**
-     * Unbinds the MonitoringProxyActivator class' fireThrowableOnEnter and fireThrowableOnReturn methods from the ThrowableProxy.
-     *
-     * @throws Exception
-     */
-    void deactivateThrowableProxyTarget() throws Exception {
-        findThrowableProxySetFireTargetMethod().invoke(null, null, null, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, null, null, false);
-    }
-
-    /**
-     * Invokes the getPreThrow Method on a BaseTraceService instance.
-     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
-     *
-     */
-//    public void fireThrowableOnEnter() {
-//        Method method = throwableInfo.getPreThrow();
-//        try {
-//            method.invoke(throwableInfo.getBtsInstance());
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//
-//    }
-//
-//    /**
-//     * Invokes the getPostThrow Method on a BaseTraceService instance.
-//     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
-//     *
-//     */
-//    public void fireThrowableOnReturn() {
-//        Method method = throwableInfo.getPostThrow();
-//        try {
-//            method.invoke(throwableInfo.getBtsInstance());
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//
-//    }
 
 }

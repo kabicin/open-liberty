@@ -25,7 +25,6 @@ import org.osgi.service.log.LogReaderService;
 import com.ibm.websphere.ras.TrConfigurator;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.TraceComponentChangeListener;
-import com.ibm.ws.logging.internal.osgi.bci.ThrowableInfo;
 import com.ibm.ws.ras.instrument.internal.main.LibertyJava8WorkaroundRuntimeTransformer;
 import com.ibm.ws.ras.instrument.internal.main.LibertyRuntimeTransformer;
 
@@ -99,12 +98,6 @@ public class Activator implements BundleActivator {
      */
     @Override
     public void stop(BundleContext context) throws Exception {
-    	System.err.println("Shutting down this bundle");
-//    	try {
-//    		throwableProxyActivator.deactivate();
-//    	} catch (Exception e) {
-//    		e.printStackTrace();
-//    	}
         msgRouter.stop();
         traceRouter.stop();
 

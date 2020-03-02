@@ -28,7 +28,6 @@ public class ThrowableProxyComponent {
      * @param bundleContext the bundleContext
      */
     synchronized void deactivate() throws Exception {
-        this.proxyActivator.deactivate();
     }
     
     /**

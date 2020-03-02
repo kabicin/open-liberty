@@ -23,10 +23,6 @@ import com.ibm.ws.logging.internal.osgi.bci.ThrowableClassAdapter;
 
 public class ThrowableClassFileTransformer implements ClassFileTransformer {
 
-    final String BASE_TRACE_SERVICE_CLASS_NAME = "com.ibm.ws.logging.internal.impl.BaseTraceService";
-    final String THROWABLE_AT_ENTRY_CLASS_NAME = "com.ibm.ws.ras.instrument.annotation.ThrowableAtEntry";
-    final String THROWABLE_AT_RETURN_CLASS_NAME = "com.ibm.ws.ras.instrument.annotation.ThrowableAtReturn";
-
     private static Instrumentation inst = null;
 
     @Override
@@ -48,6 +44,10 @@ public class ThrowableClassFileTransformer implements ClassFileTransformer {
         ClassVisitor visitor = writer;
         if (nameOfClass.equals("java/lang/Throwable")) {
             visitor = new ThrowableClassAdapter(visitor);
+        }
+        if (nameOfClass.contains("PackageProcessor")) {
+        	
+        	System.out.println("I FOUND IT: " + nameOfClass);
         }
         reader.accept(visitor, reader.SKIP_FRAMES);
         return writer.toByteArray();
