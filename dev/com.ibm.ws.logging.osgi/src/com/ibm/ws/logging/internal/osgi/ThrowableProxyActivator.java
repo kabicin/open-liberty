@@ -41,9 +41,8 @@ public class ThrowableProxyActivator {
 	/**
      * The target package for the boot loader delegated classes.
      */
-//    public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.boot.delegated.monitoring";
 	public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.logging.internal.osgi.boot.templates";
-    
+	
     /**
      * The bundle entry path prefix to the template classes.
      */
@@ -59,6 +58,7 @@ public class ThrowableProxyActivator {
      * The internal name of the {@link ThrowableProxy} class.
      */
     public final static String THROWABLE_PROXY_CLASS_INTERNAL_NAME = THROWABLE_PROXY_CLASS_NAME.replaceAll("\\.", "/");
+    
     
     /**
      * The name of the field in generated classes that will contain the
@@ -97,22 +97,12 @@ public class ThrowableProxyActivator {
 	        if (proxyJar == null) {
 	            proxyJar = createBootProxyJar();
 	        }
-	        System.out.println("Appending to bootstrap class loader search");
 	        inst.appendToBootstrapClassLoaderSearch(proxyJar);
         }
-        
-        // instantiate throwable info
-        System.out.println("Instantiated throwable info");
-  
-        
-//        activateThrowableProxyEnterTarget();
-//        activateThrowableProxyReturnTarget();
-        
         
 		inst.addTransformer(new ThrowableClassFileTransformer(), true);
 		for (Class<?> clazz : inst.getAllLoadedClasses()) {
 		    if (clazz.getName().equals("java.lang.Throwable")) {
-		    	System.out.println("Found throwable and overriding");
 		    	try {
 		            inst.retransformClasses(clazz);
 		        } catch (Throwable t) {
@@ -181,7 +171,7 @@ public class ThrowableProxyActivator {
                     writeRemappedClass(sourceClassResource, jarOutputStream, BOOT_DELEGATED_PACKAGE);
             }
         }
-
+        
         jarOutputStream.close();
         fileOutputStream.close();
 
