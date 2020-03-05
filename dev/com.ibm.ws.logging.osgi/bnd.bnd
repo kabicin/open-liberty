@@ -21,7 +21,6 @@ Private-Package: \
     com.ibm.ws.logging.internal.osgi.*
  
 Import-Package: \
-	com.ibm.ws.logging.internal.*, \
     org.objectweb.asm.*, \
     org.apache.tools.*;resolution:=optional, \
     !com.ibm.wsspi.logprovider.*, \
