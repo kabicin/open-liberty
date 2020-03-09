@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -43,7 +44,7 @@ public class ThrowableProxyActivator {
 	/**
      * The target package for the boot loader delegated classes.
      */
-    public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.boot.delegated.monitoring";
+    public final static String BOOT_DELEGATED_PACKAGE = "com.ibm.ws.boot.delegated.logging";
     
     /**
      * The bundle entry path prefix to the template classes.
@@ -71,7 +72,7 @@ public class ThrowableProxyActivator {
      * The proxy jar manifest header that indicates the version of the bundle
      * that created the jar.
      */
-    final static String MONITORING_VERSION_MANIFEST_HEADER = "Liberty-Monitoring-Bundle-Version";
+    final static String LOGGING_VERSION_MANIFEST_HEADER = "Liberty-Logging-Osgi-Bundle-Version";
     
 	
     public ThrowableProxyActivator(Instrumentation inst, BundleContext bundleContext) {
@@ -106,9 +107,7 @@ public class ThrowableProxyActivator {
         System.out.println("Instantiated throwable info");
         throwableInfo = new ThrowableInfo(inst);
         
-        activateThrowableProxyEnterTarget();
-        activateThrowableProxyReturnTarget();
-        
+        activateThrowableProxyMethodTarget();
         
 		inst.addTransformer(new ThrowableClassFileTransformer(), true);
 		for (Class<?> clazz : inst.getAllLoadedClasses()) {
@@ -293,7 +292,7 @@ public class ThrowableProxyActivator {
             jarFile = new JarFile(dataFile);
             Manifest manifest = jarFile.getManifest();
             Attributes attrs = manifest.getMainAttributes();
-            String jarVersion = attrs.getValue(MONITORING_VERSION_MANIFEST_HEADER);
+            String jarVersion = attrs.getValue(LOGGING_VERSION_MANIFEST_HEADER);
             if (!getCurrentVersion().equals(jarVersion)) {
                 jarFile.close();
                 jarFile = null;
@@ -314,9 +313,9 @@ public class ThrowableProxyActivator {
 
         Attributes manifestAttributes = manifest.getMainAttributes();
         manifestAttributes.putValue(Attributes.Name.MANIFEST_VERSION.toString(), "1.0");
-        manifestAttributes.putValue("Created-By", "Liberty Monitoring Extender");
+        manifestAttributes.putValue("Created-By", "Liberty Logging Osgi Extender");
         manifestAttributes.putValue("Created-Time", DateFormat.getInstance().format(new Date()));
-        manifestAttributes.putValue(MONITORING_VERSION_MANIFEST_HEADER, getCurrentVersion());
+        manifestAttributes.putValue(LOGGING_VERSION_MANIFEST_HEADER, getCurrentVersion());
 
         return manifest;
     }
@@ -331,27 +330,16 @@ public class ThrowableProxyActivator {
     }
 	
     /**
-     * Binds the MonitoringProxyActivator class' fireThrowableOnEnter method to the ThrowableProxy.
+     * Binds this Activator class' printStackTraceOverride method to the ThrowableProxy.
      *
      * @throws Exception the method invocation exception
      */
-    void activateThrowableProxyEnterTarget() throws Exception {
-        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnEnter");
+    void activateThrowableProxyMethodTarget() throws Exception {
+        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "printStackTraceOverride", Throwable.class, PrintStream.class);
         ReflectionHelper.setAccessible(method, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, this, method, true);
+        findThrowableProxySetFireTargetMethod().invoke(null, this, method);
     }
-
-    /**
-     * Binds the MonitoringProxyActivator class' fireThrowableOnReturn method to the ThrowableProxy.
-     *
-     * @throws Exception the method invocation exception
-     */
-    void activateThrowableProxyReturnTarget() throws Exception {
-        Method method = ReflectionHelper.getDeclaredMethod(getClass(), "fireThrowableOnReturn");
-        ReflectionHelper.setAccessible(method, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, this, method, false);
-    }
-
+    
     /**
      * Returns the Method object representing a target setter method for the ThrowableProxy.
      *
@@ -360,19 +348,18 @@ public class ThrowableProxyActivator {
      */
     Method findThrowableProxySetFireTargetMethod() throws Exception {
         Class<?> proxyClass = Class.forName(THROWABLE_PROXY_CLASS_NAME);
-        Method method = ReflectionHelper.getDeclaredMethod(proxyClass, "setFireTarget", Object.class, Method.class, boolean.class);
+        Method method = ReflectionHelper.getDeclaredMethod(proxyClass, "setFireTarget", Object.class, Method.class);
         ReflectionHelper.setAccessible(method, true);
         return method;
     }
 
     /**
-     * Unbinds the MonitoringProxyActivator class' fireThrowableOnEnter and fireThrowableOnReturn methods from the ThrowableProxy.
+     * Unbinds the Activator class'  and fireThrowableOnReturn methods from the ThrowableProxy.
      *
      * @throws Exception
      */
     void deactivateThrowableProxyTarget() throws Exception {
-        findThrowableProxySetFireTargetMethod().invoke(null, null, null, true);
-        findThrowableProxySetFireTargetMethod().invoke(null, null, null, false);
+        findThrowableProxySetFireTargetMethod().invoke(null, null, null);
     }
 
     /**
@@ -380,28 +367,14 @@ public class ThrowableProxyActivator {
      * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
      *
      */
-    public void fireThrowableOnEnter() {
-        Method method = throwableInfo.getPreThrow();
+    public boolean printStackTraceOverride(Throwable t, PrintStream originalStream) {
+        Method method = throwableInfo.getBtsMethod();
+        Boolean b = Boolean.FALSE;
         try {
-            method.invoke(throwableInfo.getBtsInstance());
+            b = (Boolean) method.invoke(throwableInfo.getBtsInstance(), t, originalStream);
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-    }
-
-    /**
-     * Invokes the getPostThrow Method on a BaseTraceService instance.
-     * This method is bound to the ThrowableProxy, which will be visible by the bootstrap class loader
-     *
-     */
-    public void fireThrowableOnReturn() {
-        Method method = throwableInfo.getPostThrow();
-        try {
-            method.invoke(throwableInfo.getBtsInstance());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
+        return b;
     }
 }

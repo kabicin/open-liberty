@@ -463,7 +463,7 @@ public class BaseTraceFormatter extends Formatter {
         String sym = getMarker(logRecord);
         String name = null;
         if (logRecord.getLoggerName() != null && (logRecord.getLoggerName().equals(SYSOUT) ||
-                                                 logRecord.getLoggerName().equals(SYSERR)))
+                                                  logRecord.getLoggerName().equals(SYSERR)))
             name = nonNullString(logRecord.getLoggerName(), null);
         else
             name = nonNullString(logRecord.getLoggerName(), logRecord.getSourceClassName());
@@ -1076,7 +1076,7 @@ public class BaseTraceFormatter extends Formatter {
 
         String message = BaseTraceService.filterStackTraces(txt);
         if (message != null) {
-            if (loglevel.equals("SystemErr")) {
+            if (loglevel.equals("SystemErr") && !BaseTraceService.throwableFlags.get().isPrintingStackTrace) {
                 message = "[err] " + message;
             }
         }

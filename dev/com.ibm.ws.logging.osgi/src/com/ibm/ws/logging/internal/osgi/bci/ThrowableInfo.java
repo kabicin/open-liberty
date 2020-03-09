@@ -17,12 +17,10 @@ import java.lang.reflect.Method;
 public class ThrowableInfo {
 
     final String BASE_TRACE_SERVICE_CLASS_NAME = "com.ibm.ws.logging.internal.impl.BaseTraceService";
-    final String THROWABLE_AT_ENTRY_CLASS_NAME = "com.ibm.ws.logging.annotation.ThrowableAtEntry";
-    final String THROWABLE_AT_RETURN_CLASS_NAME = "com.ibm.ws.logging.annotation.ThrowableAtReturn";
+    final String THROWABLE_AT_METHOD_CLASS_NAME = "com.ibm.ws.logging.annotation.ThrowableAtMethod";
 
     private final Instrumentation inst;
-    private Method preThrow;
-    private Method postThrow;
+    private Method btsMethod;
     private Object btsInstance;
 
     public ThrowableInfo(Instrumentation inst) {
@@ -38,14 +36,14 @@ public class ThrowableInfo {
 	            Method method = methods[i];
 	            Annotation[] annotations = method.getDeclaredAnnotations();
 	            for (Annotation annotation : annotations) {
-	                if (annotation.annotationType().getName().equals(THROWABLE_AT_ENTRY_CLASS_NAME)) {
-	                    setPreThrow(method);
-	                } else if (annotation.annotationType().getName().equals(THROWABLE_AT_RETURN_CLASS_NAME)) {
-	                    setPostThrow(method);
-	                }
+	                if (annotation.annotationType().getName().equals(THROWABLE_AT_METHOD_CLASS_NAME)) {
+	                	System.out.println("Loaded BTS METHOD");
+	                    setBtsMethod(method);
+	                } 
 	            }
 	        }
 	        try {
+	        	System.out.println("Setting BTS instance");
 	            setBtsInstance(btsClass.newInstance());
 	        } catch (InstantiationException e) {
 	            // TODO Auto-generated catch block
@@ -56,7 +54,7 @@ public class ThrowableInfo {
 	        }
         }
         else {
-        	System.err.println("No classes found");
+        	System.err.println("Unable to get overriden printStackTrace method from BaseTraceService");
         }
       
     }
@@ -74,20 +72,12 @@ public class ThrowableInfo {
         return null;
     }
 
-    private void setPreThrow(Method method) {
-        preThrow = method;
+    private void setBtsMethod(Method method) {
+        btsMethod = method;
     }
 
-    public Method getPreThrow() {
-        return preThrow;
-    }
-
-    private void setPostThrow(Method method) {
-        postThrow = method;
-    }
-
-    public Method getPostThrow() {
-        return postThrow;
+    public Method getBtsMethod() {
+        return btsMethod;
     }
 
     private void setBtsInstance(Object instance) {

@@ -10,10 +10,11 @@
  *******************************************************************************/
 package com.ibm.ws.logging.internal.osgi.boot.templates;
 
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 
 /**
- * The ThrowableProxy exposes annotated BaseTraceService methods to the bootstrap class loader.
+ * The ThrowableProxy exposes annotated BaseTraceService methods to the Java boot class loader
  *
  */
 public final class ThrowableProxy {
@@ -21,12 +22,7 @@ public final class ThrowableProxy {
     /**
      * The method to be fired upon a stack trace being entered.
      */
-    private static Method fireEnterMethod;
-
-    /**
-     * The method to be fired upon a stack trace returning.
-     */
-    private static Method fireReturnMethod;
+    private static Method fireMethod;
 
     /**
      * The class object needed for the method to run.
@@ -40,34 +36,22 @@ public final class ThrowableProxy {
      * @param method to be fired
      * @param isEnter true if the method is being entered and false if the method is being returned
      */
-    public final static void setFireTarget(Object target, Method method, boolean isEnter) {
+    public final static void setFireTarget(Object target, Method method) {
         fireTarget = target;
-        if (isEnter)
-            fireEnterMethod = method;
-        else
-            fireReturnMethod = method;
-    }
-
-    /**
-     * Invokes the fireEnterMethod from the fireTarget
-     */
-    public final static void fireThrowableOnEnter() {
-        try {
-            fireEnterMethod.invoke(fireTarget);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        fireMethod = method;
     }
 
     /**
      * Invokes the fireReturnMethod from the fireTarget
      */
-    public final static void fireThrowableOnReturn() {
+    public final static boolean fireMethod(Throwable t, PrintStream originalStream) {
+    	Boolean b = Boolean.FALSE;
         try {
-            fireReturnMethod.invoke(fireTarget);
+            b = (Boolean) fireMethod.invoke(fireTarget, t, originalStream);
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return b;
     }
 
 }
