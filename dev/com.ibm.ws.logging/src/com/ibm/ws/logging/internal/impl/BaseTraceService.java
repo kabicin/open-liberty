@@ -136,7 +136,9 @@ public class BaseTraceService implements TrService {
     /** Special trace component for system streams: this one "remembers" the original system err */
     protected SystemLogHolder systemErr;
 
-    protected SystemLogHolder suspendedErr;
+    protected SystemLogHolder systemSuspended;
+
+    protected ByteArrayOutputStream suspendedDelegateBaos;
 
     public static final Object NULL_ID = null;
     public static final Logger NULL_LOGGER = null;
@@ -197,10 +199,6 @@ public class BaseTraceService implements TrService {
     protected TeePrintStream teeOut = null;
     /** A PrintStream that tees to the original System.err and to our logs. */
     protected TeePrintStream teeErr = null;
-    protected TeePrintStream suspendedTeeErr = null;
-
-    protected ByteArrayOutputStream suspendedByteArrayOutputStream = null;
-    protected PrintStream suspendedPrintStream = null;
 
     /** The header written at the beginning of all log files. */
     private String logHeader;
@@ -237,6 +235,7 @@ public class BaseTraceService implements TrService {
     private static class StackTraceFlags {
         boolean needsToOutputInternalPackageMarker = false;
         boolean isSuppressingTraces = false;
+        boolean isPrintingStackTrace = false;
     }
 
     /** Track the stack trace printing activity of the current thread */
@@ -244,18 +243,6 @@ public class BaseTraceService implements TrService {
         @Override
         protected StackTraceFlags initialValue() {
             return new StackTraceFlags();
-        }
-    };
-
-    static class ThrowableFlags {
-        boolean isPrintingStackTrace = false;
-        StringBuilder stackTrace = new StringBuilder();
-    }
-
-    public static ThreadLocal<ThrowableFlags> throwableFlags = new ThreadLocal<ThrowableFlags>() {
-        @Override
-        protected ThrowableFlags initialValue() {
-            return new ThrowableFlags();
         }
     };
 
@@ -1716,7 +1703,7 @@ public class BaseTraceService implements TrService {
         public synchronized void println(String s) {
             TrOutputStream.isPrinting.set(true);
             try {
-                super.print(s);
+                super.println(s);
             } finally {
                 TrOutputStream.isPrinting.set(false);
                 super.flush();
@@ -1727,7 +1714,7 @@ public class BaseTraceService implements TrService {
         public synchronized void println(Object obj) {
             TrOutputStream.isPrinting.set(true);
             try {
-                super.print(obj);
+                super.println(obj);
             } finally {
                 TrOutputStream.isPrinting.set(false);
                 super.flush();
@@ -1765,7 +1752,7 @@ public class BaseTraceService implements TrService {
              * This helps us ignore flush requests that the JDK automatically creates in the middle of printing large (>8k) strings.
              * We want the whole String to be flushed in one shot for benefit of downstream event consumers.
              */
-            if (isPrinting.get())
+            if (isPrinting.get() || traceFlags.get().isPrintingStackTrace)
                 return;
 
             super.flush();
@@ -1801,7 +1788,6 @@ public class BaseTraceService implements TrService {
         System.setOut(teeOut);
 
         teeErr = new TeePrintStream(new TrOutputStream(systemErr, this), true);
-        suspendedTeeErr = new TeePrintStream(new TrOutputStream(suspendedErr, this), true);
         System.setErr(teeErr);
     }
 
@@ -1812,7 +1798,7 @@ public class BaseTraceService implements TrService {
     protected void restoreSystemStreams() {
         if (System.out == teeOut)
             System.setOut(systemOut.getOriginalStream());
-        if (System.err == teeErr || System.err == suspendedTeeErr)
+        if (System.err == teeErr)
             System.setErr(systemErr.getOriginalStream());
     }
 
@@ -1825,7 +1811,7 @@ public class BaseTraceService implements TrService {
      * @param rawStream if true, this is from direct invocation of System.out or System.err
      */
     protected synchronized void writeStreamOutput(SystemLogHolder holder, String txt, boolean rawStream) {
-        if (holder == systemErr && rawStream && !throwableFlags.get().isPrintingStackTrace) {
+        if (holder == systemErr && rawStream) {
             txt = "[err] " + txt;
         }
         holder.originalStream.println(txt);
@@ -1833,16 +1819,35 @@ public class BaseTraceService implements TrService {
 
     @ThrowableAtMethod(method = "printStackTrace")
     public boolean printStackTraceOverride(Throwable t, PrintStream originalStream) {
-
-        if ((originalStream == System.err || originalStream == System.out) && !throwableFlags.get().isPrintingStackTrace) {
-            throwableFlags.get().stackTrace.setLength(0);
-            throwableFlags.get().isPrintingStackTrace = true;
+        if ((originalStream == System.err || originalStream == System.out) && !traceFlags.get().isPrintingStackTrace) {
+            traceFlags.get().isPrintingStackTrace = true;
             t.printStackTrace(originalStream);
-            throwableFlags.get().isPrintingStackTrace = false;
-            System.err.println(throwableFlags.get().stackTrace.toString());
+            traceFlags.get().isPrintingStackTrace = false;
+            originalStream.flush();
             return true;
         }
         return false;
+    }
+
+    /**
+     * Trim multi or single line stack traces
+     */
+    public static String filterStackTraces(String txt) {
+        String[] lines = txt.split("\\r?\\n");
+        if (lines.length > 1) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < lines.length; i++) {
+                String filteredLine = filterStackTracesOriginal(lines[i]);
+                if (filteredLine != null) {
+                    sb.append(filteredLine);
+                    if (i != lines.length - 1) {
+                        sb.append("\n");
+                    }
+                }
+            }
+            return sb.toString();
+        }
+        return filterStackTracesOriginal(txt);
     }
 
     /**
@@ -1866,7 +1871,7 @@ public class BaseTraceService implements TrService {
      * @return null if the stack trace should be suppressed, or an indicator we're suppressing,
      *         or maybe the original stack trace
      */
-    public static String filterStackTraces(String txt) {
+    public static String filterStackTracesOriginal(String txt) {
         // Check for stack traces, which we may want to trim
         StackTraceFlags stackTraceFlags = traceFlags.get();
         // We have a little thread-local state machine here with four states controlled by two

@@ -159,12 +159,6 @@ public class ConsoleLogHandler extends JsonLogHandler implements SynchronousHand
             }
         }
 
-        // In the case of a stack trace, intercept printing and populate a StringBuilder instead.
-        if (BaseTraceService.throwableFlags.get().isPrintingStackTrace) {
-            BaseTraceService.throwableFlags.get().stackTrace.append(messageOutput + "\n");
-            return;
-        }
-
         //Write out to stderr or stdout
         if (isStderr) {
             baseTraceService.writeStreamOutput(sysErrHolder, messageOutput, false);

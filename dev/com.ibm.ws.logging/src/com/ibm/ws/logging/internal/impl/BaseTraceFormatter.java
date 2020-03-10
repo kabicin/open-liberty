@@ -1076,7 +1076,7 @@ public class BaseTraceFormatter extends Formatter {
 
         String message = BaseTraceService.filterStackTraces(txt);
         if (message != null) {
-            if (loglevel.equals("SystemErr") && !BaseTraceService.throwableFlags.get().isPrintingStackTrace) {
+            if (loglevel.equals("SystemErr")) {
                 message = "[err] " + message;
             }
         }
