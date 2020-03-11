@@ -1700,7 +1700,10 @@ public class BaseTraceService implements TrService {
         public synchronized void println(String s) {
             TrOutputStream.isPrinting.set(true);
             try {
-                super.println(s);
+                if (traceFlags.get().isPrintingStackTrace)
+                    super.println(s);
+                else
+                    super.print(s);
             } finally {
                 TrOutputStream.isPrinting.set(false);
                 super.flush();
@@ -1711,7 +1714,10 @@ public class BaseTraceService implements TrService {
         public synchronized void println(Object obj) {
             TrOutputStream.isPrinting.set(true);
             try {
-                super.println(obj);
+                if (traceFlags.get().isPrintingStackTrace)
+                    super.println(obj);
+                else
+                    super.print(obj);
             } finally {
                 TrOutputStream.isPrinting.set(false);
                 super.flush();
