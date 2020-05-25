@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017, 2019 Contributors to the Eclipse Foundation
+ * Copyright (c) 2017, 2019, 2020 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,12 +21,18 @@
  *******************************************************************************/
 package com.ibm.ws.microprofile.health.internal;
 
+import java.lang.management.ManagementFactory;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import javax.management.MBeanAttributeInfo;
+import javax.management.MBeanInfo;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
@@ -57,6 +63,7 @@ import com.ibm.wsspi.webcontainer.metadata.WebModuleMetaData;
 public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
 
     private static final TraceComponent tc = Tr.register(AppTrackerImpl.class);
+    private static final MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
 
     private final HashMap<String, Set<String>> appModules = new HashMap<String, Set<String>>();
 
@@ -92,8 +99,17 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
 
     /** {@inheritDoc} */
     @Override
+    public Set<String> getAllAppNames() {
+        return appStateMap.keySet();
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public Set<String> getModuleNames(String appName) {
-        return appModules.get(appName);
+        if (appModules.containsKey(appName)) {
+            return appModules.get(appName);
+        }
+        return null;
     }
 
     /** {@inheritDoc} */
@@ -238,6 +254,76 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
         }
     }
 
+    /**
+     * Returns true if the application with the specified name is installed, otherwise false.
+     *
+     * @return true if the application with the specified name is installed, otherwise false.
+     */
+    @Override
+    public boolean isInstalled(String appName) {
+        lock.readLock().lock();
+        try {
+            if (appStateMap.get(appName) == ApplicationState.INSTALLED) {
+                return true;
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the application with the specified name is uninstalled, otherwise false.
+     *
+     * @return true if the application with the specified name is uninstalled, otherwise false.
+     */
+    @Override
+    public boolean isUninstalled(String appName) {
+        lock.readLock().lock();
+        try {
+            if (appStateMap.get(appName) == null) {
+                return true;
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the application MBean is removed, otherwise false.
+     *
+     * @return true if the application MBean is removed, otherwise false.
+     */
+    @Override
+    public boolean isMBeanRemoved(String appName) {
+        lock.readLock().lock();
+        try {
+            if (getApplicationMBean(appName) == null) {
+                appStateMap.replace(appName, null);
+                return true;
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Returns the MBeanInfo of appName if the ApplicationMBean exists, otherwise null.
+     *
+     * @return the MBeanInfo of appName if the ApplicationMBean exists, otherwise null.
+     */
+    private MBeanInfo getApplicationMBean(String appName) {
+        MBeanInfo bean = null;
+        try {
+            ObjectName objectName = new ObjectName("WebSphere:service=com.ibm.websphere.application.ApplicationMBean,name=" + appName);
+            bean = mbeanServer.getMBeanInfo(objectName);
+        } catch (Exception e) {
+        }
+        return bean;
+    }
+
     /** {@inheritDoc} */
     @Override
     public void applicationStopping(ApplicationInfo appInfo) {}
@@ -256,13 +342,20 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
             return;
         }
 
+
         // Process the application to check if it is a WAR or an EAR file and unregister it.
         processApplication(appContainer, appInfo, appName, true);
 
         // Remove the stopped application from the appState map
         lock.writeLock().lock();
         try {
-            appStateMap.remove(appName);
+            if (appStateMap.containsKey(appName)) {
+                if (appStateMap.get(appName) != ApplicationState.STARTED) {
+                    appStateMap.replace(appName, ApplicationState.INSTALLED);
+                } else {
+                    appStateMap.remove(appName);
+                }
+            }
         } finally {
             lock.writeLock().unlock();
         }
