@@ -77,6 +77,7 @@ testsrc: test/src
         com.ibm.ws.context;version=latest,\
         com.ibm.ws.javaee.metadata.context;version=latest,\
         com.ibm.ws.javaee.version;version=latest,\
+        com.ibm.ws.jmx.connector.client.rest;version=latest,\
         com.ibm.ws.kernel.service;version=latest,\
         com.ibm.ws.logging;version=latest,\
         com.ibm.ws.org.osgi.annotation.versioning;version=latest,\
