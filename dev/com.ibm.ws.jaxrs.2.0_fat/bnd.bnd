@@ -47,7 +47,9 @@ src: \
   test-applications/servletcoexist1/src,\
   test-applications/servletcoexist2/src,\
   test-applications/servletcoexist3/src,\
+  test-applications/simpleJson/src,\
   test-applications/thirdpartyjersey/src,\
+  test-applications/thirdpartyjerseywithinjection/src,\
   test-applications/uriInfo/src,\
   test-applications/validation/src,\
   test-applications/wadl/src,\
@@ -55,7 +57,7 @@ src: \
 
 fat.project: true
 
-# These features get added programatically
+# These features get added programmatically
 tested.features: \
   jaxrs-2.1,\
   cdi-2.0,\

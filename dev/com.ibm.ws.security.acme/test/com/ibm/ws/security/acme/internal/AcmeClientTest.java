@@ -11,11 +11,19 @@
 
 package com.ibm.ws.security.acme.internal;
 
+import static junit.framework.Assert.assertEquals;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import com.ibm.ws.security.acme.AcmeCaException;
+import com.ibm.ws.security.acme.internal.util.AcmeConstants;
 
 /**
  * Unit tests for the {@link AcmeClient} class. These tests are limited to those
@@ -36,48 +44,177 @@ public class AcmeClientTest {
 	@Test
 	public void constructor_NullURI() throws Exception {
 		expectedException.expect(AcmeCaException.class);
-		expectedException.expectMessage("The ACME CA's directory URI must be a valid URI.");
+		expectedException.expectMessage("CWPKI2008E");
 
-		new AcmeClient(null, VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH, null);
+		new AcmeClient(getAcmeConfig(null, VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH));
 	}
 
 	@Test
 	public void constructor_EmptyURI() throws Exception {
 		expectedException.expect(AcmeCaException.class);
-		expectedException.expectMessage("The ACME CA's directory URI must be a valid URI.");
+		expectedException.expectMessage("CWPKI2008E");
 
-		new AcmeClient("", VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH, null);
+		new AcmeClient(getAcmeConfig("", VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH));
 	}
 
 	@Test
 	public void constructor_NullAccountKeyPath() throws Exception {
 		expectedException.expect(AcmeCaException.class);
-		expectedException.expectMessage("The account key file path must be valid.");
+		expectedException.expectMessage("CWPKI2027E");
+		expectedException.expectMessage(AcmeConstants.ACCOUNT_TYPE);
 
-		new AcmeClient(VALID_URI, null, VALID_DOMAIN_KEY_PATH, null);
+		new AcmeClient(getAcmeConfig(VALID_URI, null, VALID_DOMAIN_KEY_PATH));
 	}
 
 	@Test
 	public void constructor_EmptyAccountKeyPath() throws Exception {
 		expectedException.expect(AcmeCaException.class);
-		expectedException.expectMessage("The account key file path must be valid.");
+		expectedException.expectMessage("CWPKI2027E");
+		expectedException.expectMessage(AcmeConstants.ACCOUNT_TYPE);
 
-		new AcmeClient(VALID_URI, "", VALID_DOMAIN_KEY_PATH, null);
+		new AcmeClient(getAcmeConfig(VALID_URI, "", VALID_DOMAIN_KEY_PATH));
 	}
 
 	@Test
 	public void constructor_NullDomainKeyPath() throws Exception {
 		expectedException.expect(AcmeCaException.class);
-		expectedException.expectMessage("The domain key file path must be valid.");
+		expectedException.expectMessage("CWPKI2027E");
+		expectedException.expectMessage(AcmeConstants.DOMAIN_TYPE);
 
-		new AcmeClient(VALID_URI, VALID_DOMAIN_KEY_PATH, null, null);
+		new AcmeClient(getAcmeConfig(VALID_URI, VALID_DOMAIN_KEY_PATH, null));
 	}
 
 	@Test
 	public void constructor_EmptyDomainKeyPath() throws Exception {
 		expectedException.expect(AcmeCaException.class);
-		expectedException.expectMessage("The domain key file path must be valid.");
+		expectedException.expectMessage("CWPKI2027E");
+		expectedException.expectMessage(AcmeConstants.DOMAIN_TYPE);
 
-		new AcmeClient(VALID_URI, VALID_DOMAIN_KEY_PATH, "", null);
+		new AcmeClient(getAcmeConfig(VALID_URI, VALID_DOMAIN_KEY_PATH, ""));
+	}
+
+	private static AcmeConfig getAcmeConfig(String acmeDirectoryURI, String accountFile, String domainFile)
+			throws AcmeCaException {
+		Map<String, Object> properties = new HashMap<String, Object>();
+		properties.put(AcmeConstants.DOMAIN, new String[] { "domain.com" });
+		properties.put(AcmeConstants.DIR_URI, acmeDirectoryURI);
+		properties.put(AcmeConstants.ACCOUNT_KEY_FILE, accountFile);
+		properties.put(AcmeConstants.DOMAIN_KEY_FILE, domainFile);
+		return new AcmeConfig(properties);
+	}
+	
+	@Test
+	public void validate_renewGreaterThanValidity() throws Exception {
+
+		/*
+		 * Instantiate the ACME configuration.
+		 */
+		AcmeConfig acmeConfig = getAcmeConfig(VALID_URI, VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH);
+		acmeConfig.setRenewBeforeExpirationMs(AcmeConstants.RENEW_DEFAULT_MS * 3, true);
+
+		/*
+		 * If the fresh is longer than the duration, reset the renew to default
+		 */
+		Calendar cal = Calendar.getInstance();
+		Date notBefore = cal.getTime();
+		cal.setTimeInMillis(notBefore.getTime() + AcmeConstants.RENEW_DEFAULT_MS * 2);
+		Date notAfter = cal.getTime();
+		
+		AcmeClient acmeClient = new AcmeClient(acmeConfig);
+		
+		acmeClient.checkRenewTimeAgainstCertValidityPeriod(notBefore, notAfter, "123456");
+		
+		assertEquals(AcmeConstants.RENEW_DEFAULT_MS, acmeConfig.getRenewBeforeExpirationMs());
+	}
+	
+	@Test
+	public void validate_renewGreaterThanVadilityLessThanDefault() throws Exception {
+		/*
+		 * Instantiate the ACME configuration.
+		 */
+		AcmeConfig acmeConfig = getAcmeConfig(VALID_URI, VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH);
+		acmeConfig.setRenewBeforeExpirationMs(AcmeConstants.RENEW_DEFAULT_MS * 3, true);
+		
+		long duration = 30000;
+
+		acmeConfig.setRenewBeforeExpirationMs(duration + 10, true);
+		
+		/*
+		 * Instantiate the ACME configuration.
+		 */
+
+		assertEquals(duration + 10, acmeConfig.getRenewBeforeExpirationMs().longValue());
+
+		/*
+		 * If the duration is under the default and the renewBeforeExpiration is longer, reset
+		 */
+		
+		Calendar cal = Calendar.getInstance();
+		Date notBefore = cal.getTime();
+		cal.add(Calendar.MILLISECOND, Math.toIntExact(duration));
+		Date notAfter = cal.getTime();
+		
+		AcmeClient acmeClient = new AcmeClient(acmeConfig);
+		
+		acmeClient.checkRenewTimeAgainstCertValidityPeriod(notBefore, notAfter, "123456");
+		
+		assertEquals(Math.round(duration * AcmeConstants.RENEW_DIVISOR), acmeConfig.getRenewBeforeExpirationMs().longValue());
+	}
+	
+	@Test
+	public void validate_renewGreaterThanVadilityLessThanMinimum() throws Exception {
+
+		/*
+		 * Instantiate the ACME configuration.
+		 */
+		AcmeConfig acmeConfig = getAcmeConfig(VALID_URI, VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH);
+
+		long duration = AcmeConstants.RENEW_CERT_MIN - 10;
+
+		acmeConfig.setRenewBeforeExpirationMs(AcmeConstants.RENEW_CERT_MIN + 10, true);
+
+		/*
+		 * If the duration is under the default and the renewBeforeExpiration is longer, reset
+		 */
+		
+		Calendar cal = Calendar.getInstance();
+		Date notBefore = cal.getTime();
+		cal.add(Calendar.MILLISECOND, Math.toIntExact(duration));
+		Date notAfter = cal.getTime();
+		
+		AcmeClient acmeClient = new AcmeClient(acmeConfig);
+		
+		acmeClient.checkRenewTimeAgainstCertValidityPeriod(notBefore, notAfter, "123456");
+		
+		assertEquals(AcmeConstants.RENEW_CERT_MIN, acmeConfig.getRenewBeforeExpirationMs().longValue());
+	}
+	
+
+	
+	@Test
+	public void validate_validityLessThanMinRenew() throws Exception {
+
+		/*
+		 * Instantiate the ACME configuration.
+		 */
+		AcmeConfig acmeConfig = getAcmeConfig(VALID_URI, VALID_USER_KEY_PATH, VALID_DOMAIN_KEY_PATH);
+
+		acmeConfig.setRenewBeforeExpirationMs(AcmeConstants.RENEW_CERT_MIN, true);
+
+		/*
+		 * If the duration is less than the min_renew and the renewBeforeExpiration is at the min, we don't modify it.
+		 */
+		int duration = 3;
+		Calendar cal = Calendar.getInstance();
+		Date notBefore = cal.getTime();
+		cal.add(Calendar.SECOND, duration);
+		Date notAfter = cal.getTime();
+
+		AcmeClient acmeClient = new AcmeClient(acmeConfig);
+
+		acmeClient.checkRenewTimeAgainstCertValidityPeriod(notBefore, notAfter, "123456");
+
+		assertEquals(AcmeConstants.RENEW_CERT_MIN, acmeConfig.getRenewBeforeExpirationMs().longValue());
+
 	}
 }

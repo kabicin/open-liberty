@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2018 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -96,6 +96,8 @@ public class SubjectHelper {
      * @return
      */
     public Hashtable<String, ?> getHashtableFromSubject(final Subject subject, final String[] properties) {
+        if (subject == null)
+            return null;
         return AccessController.doPrivileged(new PrivilegedAction<Hashtable<String, ?>>() {
             @Override
             public Hashtable<String, ?> run() {
@@ -394,22 +396,5 @@ public class SubjectHelper {
             }
         }
         return null;
-    }
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    private static String setSystemProperty(final String propName, final String propValue) {
-
-        String savedPropValue = (String) java.security.AccessController.doPrivileged(new java.security.PrivilegedAction() {
-            @Override
-            public String run() {
-                String oldValue = System.getProperty(propName);
-                System.setProperty(propName, propValue);
-                return oldValue;
-            }
-        });
-        if (tc.isDebugEnabled())
-            Tr.debug(tc, propName + " property previous: " + ((savedPropValue != null) ? savedPropValue : "<null>") + " and now: " + propValue);
-
-        return savedPropValue;
     }
 }

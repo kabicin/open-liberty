@@ -90,6 +90,7 @@ import com.ibm.ws.concurrent.persistent.ejb.TimerStatus;
 import com.ibm.ws.concurrent.persistent.ejb.TimerTrigger;
 import com.ibm.ws.concurrent.persistent.ejb.TimersPersistentExecutor;
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
+import com.ibm.ws.javaee.version.JavaEEVersion;
 import com.ibm.ws.kernel.feature.ServerStarted;
 import com.ibm.ws.runtime.metadata.ComponentMetaData;
 import com.ibm.ws.runtime.update.RuntimeUpdateListener;
@@ -194,6 +195,16 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
      * Default execution properties to use when none are present for the task.
      */
     private final Map<String, String> defaultExecProps = new TreeMap<String, String>();
+
+    /**
+     * Jakarta EE version if Jakarta EE 9 or higher. If 0, assume a lesser EE spec version.
+     */
+    private volatile int eeVersion;
+
+    /**
+     * Tracks the most recently bound EE version service reference. Only use this within the set/unsetEEVersion methods.
+     */
+    private ServiceReference<JavaEEVersion> eeVersionRef;
 
     /**
      * Common Liberty thread pool.
@@ -329,7 +340,8 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
                 throw new IllegalArgumentException("id: null, jndiName: null");
         }
 
-        defaultExecProps.put(ManagedTask.TRANSACTION, ManagedTask.USE_TRANSACTION_OF_EXECUTION_THREAD);
+        String TRANSACTION_PROP_KEY = eeVersion < 9 ? "javax.enterprise.concurrent.TRANSACTION" : "jakarta.enterprise.concurrent.TRANSACTION"; // ManagedTask.TRANSACTION
+        defaultExecProps.put(TRANSACTION_PROP_KEY, "USE_TRANSACTION_OF_EXECUTION_THREAD"); // ManagedTask.USE_TRANSACTION_OF_EXECUTION_THREAD
         defaultExecProps.put(WSContextService.DEFAULT_CONTEXT, WSContextService.UNCONFIGURED_CONTEXT_TYPES);
         defaultExecProps.put(WSContextService.TASK_OWNER, name);
 
@@ -717,7 +729,15 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
         if (execProps == null)
             execProps = defaultExecProps;
         else {
-            Map<String, String> mergedProps = new TreeMap<String, String>(defaultExecProps);
+            Map<String, String> mergedProps;
+            if (execProps.containsKey("jakarta.enterprise.concurrent.TRANSACTION")
+                || execProps.containsKey("javax.enterprise.concurrent.TRANSACTION")) { // ManagedTask.TRANSACTION is specified by the task
+                mergedProps = new TreeMap<String, String>();
+                mergedProps.put(WSContextService.DEFAULT_CONTEXT, WSContextService.UNCONFIGURED_CONTEXT_TYPES);
+                mergedProps.put(WSContextService.TASK_OWNER, name);
+            } else {
+                mergedProps = new TreeMap<String, String>(defaultExecProps);
+            }
             mergedProps.putAll(execProps);
             execProps = mergedProps;
         }
@@ -1206,12 +1226,32 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
 
         Map<String, String> execProps = getExecutionProperties(task);
 
-        String name = execProps.get(ManagedTask.IDENTITY_NAME);
+        // ManagedTask.IDENTITY_NAME
+        String name;
+        if (eeVersion < 9) {
+            name = execProps.get("javax.enterprise.concurrent.IDENTITY_NAME");
+            if (name == null)
+                name = execProps.get("jakarta.enterprise.concurrent.IDENTITY_NAME");
+        } else {
+            name = execProps.get("jakarta.enterprise.concurrent.IDENTITY_NAME");
+            if (name == null)
+                name = execProps.get("javax.enterprise.concurrent.IDENTITY_NAME");
+        }
         record.setName(Utils.normalizeString(name));
 
-        String longRunningHint = execProps.get(ManagedTask.LONGRUNNING_HINT);
+        // ManagedTask.LONGRUNNING_HINT
+        String longRunningHint, key;
+        if (eeVersion < 9) {
+            longRunningHint = execProps.get(key = "javax.enterprise.concurrent.LONGRUNNING_HINT");
+            if (longRunningHint == null)
+                longRunningHint = execProps.get(key = "jakarta.enterprise.concurrent.LONGRUNNING_HINT");
+        } else {
+            longRunningHint = execProps.get(key = "jakarta.enterprise.concurrent.LONGRUNNING_HINT");
+            if (longRunningHint == null)
+                longRunningHint = execProps.get(key = "javax.enterprise.concurrent.LONGRUNNING_HINT");
+        }
         if (Boolean.parseBoolean(longRunningHint))
-            throw new RejectedExecutionException(ManagedTask.LONGRUNNING_HINT + ": " + longRunningHint);
+            throw new RejectedExecutionException(key + ": " + longRunningHint);
 
         int txTimeout;
         String txTimeoutString = execProps.get(PersistentExecutor.TRANSACTION_TIMEOUT);
@@ -1227,6 +1267,18 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
             }
         record.setTransactionTimeout(txTimeout);
 
+        // ManagedTask.TRANSACTION
+        String transaction;
+        if (eeVersion < 9) {
+            transaction = execProps.get("javax.enterprise.concurrent.TRANSACTION");
+            if (transaction == null)
+                transaction = execProps.get("jakarta.enterprise.concurrent.TRANSACTION");
+        } else {
+            transaction = execProps.get("jakarta.enterprise.concurrent.TRANSACTION");
+            if (transaction == null)
+                transaction = execProps.get("javax.enterprise.concurrent.TRANSACTION");
+        }
+
         short flags = 0;
         String autoPurge = execProps.get(AutoPurge.PROPERTY_NAME);
         if (autoPurge == null || AutoPurge.ON_SUCCESS.toString().equals(autoPurge))
@@ -1239,7 +1291,7 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
             flags |= TaskRecord.Flags.EJB_TIMER.bit;
         if (taskInfo.getInterval() == -1 && taskInfo.getInitialDelay() != -1)
             flags |= TaskRecord.Flags.ONE_SHOT_TASK.bit;
-        if (config.missedTaskThreshold > 0 || ManagedTask.SUSPEND.equals(execProps.get(ManagedTask.TRANSACTION)))
+        if (config.missedTaskThreshold > 0 || "SUSPEND".equals(transaction)) // ManagedTask.SUSPEND
             flags |= TaskRecord.Flags.SUSPEND_TRAN_OF_EXECUTOR_THREAD.bit;
 
         record.setMiscBinaryFlags(flags);
@@ -1722,6 +1774,27 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
     }
 
     /**
+     * Declarative Services method for setting the Jakarta/Java EE version
+     *
+     * @param ref reference to the service
+     */
+    @Reference(service = JavaEEVersion.class,
+               cardinality = ReferenceCardinality.OPTIONAL,
+               policy = ReferencePolicy.DYNAMIC,
+               policyOption = ReferencePolicyOption.GREEDY)
+    protected void setEEVersion(ServiceReference<JavaEEVersion> ref) {
+        String version = (String) ref.getProperty("version");
+        if (version == null) {
+            eeVersion = 0;
+        } else {
+            int dot = version.indexOf('.');
+            String major = dot > 0 ? version.substring(0, dot) : version;
+            eeVersion = Integer.parseInt(major);
+        }
+        eeVersionRef = ref;
+    }
+
+    /**
      * Declarative Services method for setting the Liberty executor.
      *
      * @param svc the service
@@ -1964,6 +2037,18 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
      */
     protected void unsetContextService(ServiceReference<WSContextService> ref) {
         contextSvcRef.unsetReference(ref);
+    }
+
+    /**
+     * Declarative Services method for unsetting the Jakarta/Java EE version
+     *
+     * @param ref reference to the service
+     */
+    protected void unsetEEVersion(ServiceReference<JavaEEVersion> ref) {
+        if (eeVersionRef == ref) {
+            eeVersionRef = null;
+            eeVersion = 0;
+        }
     }
 
     /**
@@ -2251,6 +2336,8 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
          */
         private final Config initialConfig;
 
+        private boolean isFirstTimeCoordinating = true;
+
         private PollingTask(Config config) {
             initialConfig = config;
         }
@@ -2281,10 +2368,12 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
          * Using the persistent store, coordinates with other instances to partition out the responsibility for polling at the desired interval.
          *
          * @param config persistent executor configuration, including the desired poll interval.
-         * @return the computed delay until the next poll for this instance.
+         * @return the computed time (millis) at which this task should poll again.
          */
         private long coordinateNextPoll(Config config) {
-            long delay;
+            final boolean trace = TraceComponent.isAnyTracingEnabled();
+
+            long expiry;
             try {
                 EmbeddableWebSphereTransactionManager tranMgr = tranMgrRef.getServiceWithException();
 
@@ -2293,12 +2382,45 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
 
                 tranMgr.begin();
                 try {
-                    // TODO implement this method. For now, we invoke some basic db operations to demonstrate that what we have so far is working
                     Object[] expiryAndLastUpdated = taskStore.findPollInfoForUpdate(pollPartitionId);
-                    long expiry = (Long) expiryAndLastUpdated[0];
+                    expiry = (Long) expiryAndLastUpdated[0];
                     long lastUpdated = (Long) expiryAndLastUpdated[1];
-                    taskStore.updatePollInfo(pollPartitionId, System.currentTimeMillis() + config.pollInterval);
-                    delay = config.pollInterval;
+                    long now = System.currentTimeMillis();
+                    int slot = 0;
+                    long delay = -1;
+                    // number of poll intervals to miss before resetting
+                    final int missedPollsThreshold = 2; // Could be make configurable in the future.
+
+                    /*
+                     * If we have missed more than two poll intervals in a row we want to reset the polling data, as we're assuming
+                     * something bad happened to the cluster.
+                     * If a PollingTask is running for the first time and the next poll is to be scheduled more than 5 intervals into the future,
+                     * reset the polling data. This prevents a massive outage that recovered very quickly (under 2 poll intervals) from creating
+                     * a potentially large gap in polling.
+                     */
+                    // We add 1 to missedPollsThreshold to allow up to the next poll interval before considering it a miss.
+                    if (now - lastUpdated > (missedPollsThreshold + 1) * config.pollInterval || (isFirstTimeCoordinating && expiry - now > 5 * config.pollInterval)) {
+                        expiry = now / 1000 * 1000 + 600;
+                        delay = config.pollInterval - (now - expiry);
+                        slot = 1;
+                        if (trace && tc.isDebugEnabled()) {
+                            if (now - lastUpdated > missedPollsThreshold * config.pollInterval) {
+                                Tr.debug(PersistentExecutorImpl.this, tc, "Detected " + missedPollsThreshold + " or more poll intervals were missed.  Resetting poll info.");
+                            } else {
+                                Tr.debug(PersistentExecutorImpl.this, tc, "Detected starting new PollingTask. Resetting poll info.");
+                            }
+                        }
+                    } else {
+                        while (delay < 0) {
+                            delay = ((++slot) * config.pollInterval) - (now - expiry);
+                        }
+
+                    }
+                    if (trace && tc.isDebugEnabled())
+                        Tr.debug(PersistentExecutorImpl.this, tc, "now = " + now + "; slot = " + slot);
+
+                    expiry = expiry + slot * config.pollInterval;
+                    taskStore.updatePollInfo(pollPartitionId, expiry);
                     successful = true;
                 } finally {
                     if (successful)
@@ -2307,10 +2429,11 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
                         tranMgr.rollback();
                 }
             } catch (Throwable x) {
-                delay = config.pollInterval;
+                expiry = System.currentTimeMillis() + config.pollInterval;
             }
 
-            return delay;
+            isFirstTimeCoordinating = false;
+            return expiry;
         }
 
         /**
@@ -2439,20 +2562,20 @@ public class PersistentExecutorImpl implements ApplicationRecycleComponent, DDLG
                     // Schedule next poll
                     config = configRef.get();
                     if (config.enableTaskExecution && config.pollInterval >= 0 && config == initialConfig) {
+                        ScheduledFuture<?> future;
                         long duration;
-                        long delay;
                         if (config.pollingCoordination && config.missedTaskThreshold > 0) {
-                            delay = coordinateNextPoll(config);
+                            long expiry = coordinateNextPoll(config);
                             duration = System.nanoTime() - beginPoll;
+                            future = scheduledExecutor.schedule(this, expiry - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
                         } else {
                             duration = System.nanoTime() - beginPoll;
-                            delay = config.pollInterval - TimeUnit.NANOSECONDS.toMillis(duration);
+                            long delay = config.pollInterval - TimeUnit.NANOSECONDS.toMillis(duration);
+                            future = scheduledExecutor.schedule(this, delay, TimeUnit.MILLISECONDS);
                         }
 
                         if (trace && tc.isDebugEnabled())
-                            Tr.debug(PersistentExecutorImpl.this, tc, "Poll completed in " + duration + "ns. Next poll " + delay + "ms from now");
-                        ScheduledFuture<?> future;
-                        future = scheduledExecutor.schedule(this, delay, TimeUnit.MILLISECONDS);
+                            Tr.debug(PersistentExecutorImpl.this, tc, "Poll completed in " + duration + "ns. Next poll " + future.getDelay(TimeUnit.MILLISECONDS) + "ms from now");
 
                         pollingFutureRef.getAndSet(future);
                     }

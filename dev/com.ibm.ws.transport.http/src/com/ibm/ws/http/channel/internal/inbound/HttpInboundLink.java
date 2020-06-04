@@ -23,7 +23,6 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.ffdc.FFDCFilter;
 import com.ibm.ws.http.channel.h2internal.H2HttpInboundLinkWrap;
-import com.ibm.ws.http.channel.h2internal.exceptions.CompressionException;
 import com.ibm.ws.http.channel.h2internal.exceptions.Http2Exception;
 import com.ibm.ws.http.channel.internal.CallbackIDs;
 import com.ibm.ws.http.channel.internal.HttpChannelConfig;
@@ -269,7 +268,7 @@ public class HttpInboundLink extends InboundProtocolLink implements InterChannel
 
     /**
      * Query if this link should use HTTP/2
-     * 
+     *
      * @param vc
      * @return
      */
@@ -280,10 +279,9 @@ public class HttpInboundLink extends InboundProtocolLink implements InterChannel
         HttpInboundServiceContextImpl sc = getHTTPContext();
         if (!sc.isH2Connection()) {
             // if ALPN has selected h2, OR if this link is not secure, check for the HTTP/2 connection preface
-            if ((checkAlpnH2() || (!sc.isSecure() && sc.isHttp2Enabled())) && checkForH2MagicString(sc))
-            {
+            if ((checkAlpnH2() || (!sc.isSecure() && sc.isHttp2Enabled())) && checkForH2MagicString(sc)) {
                 alreadyH2Upgraded = true;
-                return true;    
+                return true;
             }
         }
         return false;
@@ -293,9 +291,9 @@ public class HttpInboundLink extends InboundProtocolLink implements InterChannel
      * @return true if SSL is in use and "h2" was chosen via ALPN
      */
     private boolean checkAlpnH2() {
-        return this.myTSC.getSSLContext() != null 
-            && this.myTSC.getSSLContext().getAlpnProtocol() != null 
-            && this.myTSC.getSSLContext().getAlpnProtocol().equals("h2");
+        return this.myTSC.getSSLContext() != null
+               && this.myTSC.getSSLContext().getAlpnProtocol() != null
+               && this.myTSC.getSSLContext().getAlpnProtocol().equals("h2");
     }
 
     /**
@@ -1013,7 +1011,7 @@ public class HttpInboundLink extends InboundProtocolLink implements InterChannel
             (buffer = myTSC.getReadInterface().getBuffer()) == null) {
             if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
                 Tr.exit(tc, "checkForH2MagicString: returning " + hasMagicString + " due to null read buffer");
-            }        
+            }
             return hasMagicString;
         }
 

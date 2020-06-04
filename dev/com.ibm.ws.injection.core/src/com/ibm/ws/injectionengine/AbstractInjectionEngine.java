@@ -389,7 +389,7 @@ public abstract class AbstractInjectionEngine implements InternalInjectionEngine
                                          ComponentNameSpaceConfiguration compNSConfig) throws InjectionException {
         final boolean isTraceOn = TraceComponent.isAnyTracingEnabled();
         if (isTraceOn && tc.isEntryEnabled())
-            Tr.entry(tc, "processInjectionMetaData (targets)");
+            Tr.entry(tc, "processInjectionMetaData", "(targets)");
 
         InjectionProcessorContextImpl context = createInjectionProcessorContext();
         // F743-31682 - Always bind in the client container code flow.
@@ -413,7 +413,7 @@ public abstract class AbstractInjectionEngine implements InternalInjectionEngine
         notifyInjectionMetaDataListeners(null, compNSConfig);
 
         if (isTraceOn && tc.isEntryEnabled())
-            Tr.exit(tc, "processInjectionMetaData: " + injectionTargetMap);
+            Tr.exit(tc, "processInjectionMetaData", injectionTargetMap);
     }
 
     /**
@@ -919,11 +919,10 @@ public abstract class AbstractInjectionEngine implements InternalInjectionEngine
 
                 if (!ivProcessorProviders.containsKey(annotation)) {
                     if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled())
-                        Tr.debug(tc, "registerObjectFactory: An injection processor " +
-                                     "does not exist for the specified annotation: " +
-                                     annotation.getName());
+                        Tr.debug(tc, "registerObjectFactory: An injection processor does not exist for the specified annotation: " +
+                                     annotation.getName() + ". Object factory " + objectFactory.getName() + " not registered for the " + type.getName() + " type.");
                     throw new InjectionException("An injection processor does not exist for the specified annotation: " +
-                                                 annotation.getName());
+                                                 annotation.getName() + ". Object factory " + objectFactory.getName() + " not registered for the " + type.getName() + " type.");
                 }
 
                 factories = new HashMap<Class<?>, ObjectFactoryInfo>();
@@ -1012,11 +1011,10 @@ public abstract class AbstractInjectionEngine implements InternalInjectionEngine
             if (factories == null) {
                 if (!ivProcessorProviders.containsKey(annotation)) {
                     if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled())
-                        Tr.debug(tc, "registerOverrideReferenceFactory: An injection " +
-                                     "processor does not exist for the specified annotation: " +
-                                     annotation.getName());
+                        Tr.debug(tc, "registerOverrideReferenceFactory: An injection processor does not exist for the specified annotation: " +
+                                     annotation.getName() + ". Factory " + factory.getClass().getName() + " not registered.");
                     throw new InjectionException("An injection processor does not exist for the specified annotation: " +
-                                                 annotation.getName());
+                                                 annotation.getName() + ". Factory " + factory.getClass().getName() + " not registered.");
                 }
 
                 factories = new OverrideReferenceFactory[1];

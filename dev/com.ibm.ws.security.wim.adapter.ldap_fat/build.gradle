@@ -16,7 +16,6 @@ def appBuildDir = "${buildDir}/test-application"
 
 dependencies { 
   requiredLibs 'com.ibm.ws.componenttest:public.api:1.0.0',
-    'com.unboundid:unboundid-ldapsdk:4.0.9',
     'commons-logging:commons-logging:1.1.1',
     'commons-codec:commons-codec:1.4',
     'org.apache.httpcomponents:httpclient:4.1.2',
@@ -131,12 +130,29 @@ autoFVT.doLast {
     'com.ibm.ws.security.wim.adapter.ldap.fat.readtimeout',
     'com.ibm.ws.security.wim.adapter.ldap.fat.racf.sdbm',
     'com.ibm.ws.security.wim.adapter.ldap.fat.return.to.primary',
-    'com.ibm.ws.security.wim.adapter.ldap.fat.racf.sdbm.basic'
+    'com.ibm.ws.security.wim.adapter.ldap.fat.racf.sdbm.basic',
+    'com.ibm.ws.security.wim.adapter.ldap.fat.jndi.output'
   ]
   servers.each { server ->
     copy { 
       from new File(project(':com.ibm.ws.security.registry_test.servlet').buildDir, 'test-application/userRegistry.war')
       into new File(autoFvtDir, 'publish/servers/' + server + '/dropins')
+    }
+  }
+  
+  /*
+   * Copy the InMemoryLdapServer truststore into test servers.
+   */
+  servers = [
+    'com.ibm.ws.security.wim.adapter.ldap.fat.tds.ssl',
+    'com.ibm.ws.security.wim.adapter.ldap.fat.ad.ssl',
+    'com.ibm.ws.security.registry.ldap.fat.ids.ssl.trustonly',
+    'com.ibm.ws.security.registry.ldap.fat.ids.ssl'
+  ]
+  servers.each { server ->
+    copy { 
+      from project(':com.ibm.ws.com.unboundid').file('resources/truststore.p12')
+      into new File(autoFvtDir,'publish/servers/' + server)
     }
   }
 

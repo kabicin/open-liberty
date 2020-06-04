@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017, 2018 IBM Corporation and others.
+ * Copyright (c) 2017, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,6 +12,7 @@ package com.ibm.ws.transaction.web;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.PrintWriter;
@@ -26,6 +27,7 @@ import java.util.concurrent.CompletionException;
 
 import javax.annotation.Resource;
 import javax.annotation.Resource.AuthenticationType;
+import javax.inject.Inject;
 import javax.naming.InitialContext;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -43,12 +45,14 @@ import org.junit.Test;
 
 import com.ibm.tx.jta.TransactionManagerFactory;
 import com.ibm.tx.jta.UserTransactionFactory;
+import com.ibm.tx.jta.ut.util.XAResourceImpl;
 import com.ibm.websphere.uow.UOWSynchronizationRegistry;
 import com.ibm.ws.tx.jta.embeddable.UserTransactionController;
 import com.ibm.wsspi.uow.UOWAction;
 import com.ibm.wsspi.uow.UOWManager;
 
 import componenttest.annotation.ExpectedFFDC;
+import componenttest.annotation.SkipForRepeat;
 import componenttest.app.FATServlet;
 
 @SuppressWarnings("serial")
@@ -57,6 +61,9 @@ public class SimpleServlet extends FATServlet {
 
     @Resource(name = "jdbc/derby", shareable = true, authenticationType = AuthenticationType.APPLICATION)
     DataSource ds;
+
+    @Inject
+    AsyncBean bean;
 
     /**
      * Message written to servlet to indicate that is has been successfully invoked.
@@ -92,11 +99,27 @@ public class SimpleServlet extends FATServlet {
     // can be added directly to the test servlet.
     // In this test servlet, each @Test method is invoked in its own HTTP GET request.
 
+    final int fallbackResult = 17;
+
+    @Test
+    // TODO: Remove skip when injection is enabled for jakartaee9
+    @SkipForRepeat({ SkipForRepeat.EE9_FEATURES })
+    public void testAsyncFallback(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        System.out.println("testAsyncFallback: About to call bean.getInt() on thread: " + String.format("%08X", Thread.currentThread().getId()));
+
+        XAResourceImpl.clear();
+        assertEquals("AsyncBean didn't fallback", fallbackResult, bean.getInt().get().intValue());
+        XAResourceImpl.printState();
+        assertTrue("Transaction did not rollback", XAResourceImpl.allInState(XAResourceImpl.ROLLEDBACK));
+        assertEquals("AsyncBean didn't enlist a resource", 1, XAResourceImpl.resourceCount());
+        XAResourceImpl.clear();
+    }
+
     @Test
     public void testUserTranLookup(HttpServletRequest request, HttpServletResponse response) throws Exception {
         final Object ut = new InitialContext().lookup("java:comp/UserTransaction");
 
-        if (ut instanceof UserTransaction) {
+        if (ut instanceof javax.transaction.UserTransaction) {
             ((UserTransaction) ut).begin();
             ((UserTransaction) ut).commit();
         } else {

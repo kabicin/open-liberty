@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012, 2014 IBM Corporation and others.
+ * Copyright (c) 2012, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -19,11 +19,12 @@ import org.junit.runners.Suite.SuiteClasses;
 import com.ibm.ws.fat.util.FatLogHandler;
 import com.ibm.ws.jsp23.fat.tests.JSP23JSP22ServerTest;
 import com.ibm.ws.jsp23.fat.tests.JSPJava8Test;
-import com.ibm.ws.jsp23.fat.tests.JSPServerHttpUnit;
-import com.ibm.ws.jsp23.fat.tests.JSPServerTest;
+import com.ibm.ws.jsp23.fat.tests.JSPCdiTest;
+import com.ibm.ws.jsp23.fat.tests.JSPTests;
 
 import componenttest.rules.repeater.FeatureReplacementAction;
 import componenttest.rules.repeater.RepeatTests;
+import componenttest.rules.repeater.JakartaEE9Action;
 
 /**
  * JSP 2.3 Tests
@@ -32,9 +33,9 @@ import componenttest.rules.repeater.RepeatTests;
  */
 @RunWith(Suite.class)
 @SuiteClasses({
-                JSPServerHttpUnit.class,
-                JSPServerTest.class,
+                JSPTests.class,
                 JSPJava8Test.class,
+                JSPCdiTest.class,
                 JSP23JSP22ServerTest.class
 })
 public class FATSuite {
@@ -56,5 +57,6 @@ public class FATSuite {
                     .andWith(new FeatureReplacementAction("cdi-1.2", "cdi-2.0")
                                     .withID("CDI-2.0")
                                     .forceAddFeatures(false)
-                                    .withMinJavaLevel(8));
+                                    .withMinJavaLevel(8))
+                    .andWith(new JakartaEE9Action());
 }

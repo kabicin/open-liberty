@@ -18,6 +18,7 @@ import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.runner.RunWith;
 
 import com.ibm.websphere.simplicity.ShrinkHelper;
@@ -26,6 +27,8 @@ import componenttest.annotation.Server;
 import componenttest.annotation.TestServlet;
 import componenttest.annotation.TestServlets;
 import componenttest.custom.junit.runner.FATRunner;
+import componenttest.rules.repeater.JakartaEE9Action;
+import componenttest.rules.repeater.RepeatTests;
 import componenttest.topology.impl.LibertyServer;
 import componenttest.topology.utils.FATServletClient;
 import web.derby.DerbyLoadFromAppServlet;
@@ -37,6 +40,10 @@ import web.other.LoadFromAppServlet;
  */
 @RunWith(FATRunner.class)
 public class JDBCLoadFromAppTest extends FATServletClient {
+    @ClassRule
+    public static RepeatTests r = RepeatTests
+                    .withoutModification()
+                    ;//.andWith(new JakartaEE9Action()); TODO uncomment once JCA (and possibly other) features are ready for Jakarta
 
     @Server("com.ibm.ws.jdbc.fat.loadfromapp")
     @TestServlets(value = {
@@ -49,6 +56,7 @@ public class JDBCLoadFromAppTest extends FATServletClient {
     public static void setUp() throws Exception {
         WebArchive derbyApp = ShrinkWrap.create(WebArchive.class, "derbyApp.war")
                         .addPackage("web.derby") //
+                        .addAsWebInfResource(new File("test-applications/derbyapp/resources/WEB-INF/ibm-ejb-jar-bnd.xml"))
                         .addAsWebInfResource(new File("test-applications/derbyapp/resources/WEB-INF/ibm-web-bnd.xml"))
                         .addAsLibrary(new File("publish/shared/resources/derby/derby.jar")) //
                         .addPackage("jdbc.driver.proxy"); // delegates to the Derby JDBC driver
@@ -63,9 +71,11 @@ public class JDBCLoadFromAppTest extends FATServletClient {
                         .addPackage("jdbc.driver.proxy"); // delegates to the "mini" JDBC driver
 
         JavaArchive ejb1JAR = ShrinkWrap.create(JavaArchive.class, "ejb1.jar")
+                        .addAsManifestResource(new File("test-applications/otherapp/resources/ejb.first/META-INF/ibm-ejb-jar-bnd.xml"))
                         .addPackage("ejb.first");
 
         JavaArchive ejb2JAR = ShrinkWrap.create(JavaArchive.class, "ejb2.jar")
+                        .addAsManifestResource(new File("test-applications/otherapp/resources/ejb.second/META-INF/ibm-ejb-jar-bnd.xml"))
                         .addPackage("ejb.second");
 
         JavaArchive lmJAR = ShrinkWrap.create(JavaArchive.class, "top-level-login-modules.jar")
@@ -79,13 +89,6 @@ public class JDBCLoadFromAppTest extends FATServletClient {
 
         ShrinkHelper.exportAppToServer(server, otherApp);
 
-        // TODO remove this
-        JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "tempLoginModule.jar");
-        jar.addPackage("web.derby");
-        jar.addPackage("web.other");
-        jar.addPackage("loginmod");
-        ShrinkHelper.exportToServer(server, "/", jar);
-
         server.addInstalledAppForValidation("derbyApp");
         server.addInstalledAppForValidation("otherApp");
 
@@ -94,6 +97,9 @@ public class JDBCLoadFromAppTest extends FATServletClient {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        server.stopServer("SRVE9967W.*derbyLocale"); // ignore missing Derby locales
+        server.stopServer("CWWKS1148E(?=.*LoadFromAppLoginModule)(?=.*derbyApp)", // Intentional error: loginmod.LoadFromAppLoginModule not found in derbyApp
+                          "CWWKS1148E(?=.*LoadFromWebAppLoginModule)(?=.*otherApp)", // Intentional error: web.derby.LoadFromWebAppLoginModule not found in otherApp
+                          "SRVE9967W.*derbyLocale" // ignore missing Derby locales
+        );
     }
 }

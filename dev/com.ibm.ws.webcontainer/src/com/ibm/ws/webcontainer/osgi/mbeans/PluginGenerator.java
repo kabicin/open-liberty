@@ -147,6 +147,7 @@ public class PluginGenerator {
 
     private final PluginConfigData pcd;
     private final BundleContext context;
+    private final Bundle bundle;
 
     // distinguish between implicit generation (when endpoints change) and explicit generation (user mbean request)
     private boolean utilityRequest = true;
@@ -158,7 +159,7 @@ public class PluginGenerator {
     private File cachedFile;
 
     private static final boolean CHANGE_TRANSFORMER;
-
+    
     static {
         if (!JavaInfo.vendor().equals(Vendor.IBM)) {
             CHANGE_TRANSFORMER = false;
@@ -191,7 +192,9 @@ public class PluginGenerator {
         pcd = newPcd;
         appServerName = locSvc.getServerName();
 
-        cachedFile = context.getBundle().getDataFile("cached-PluginCfg.xml");
+        bundle = context.getBundle();
+        cachedFile = bundle.getDataFile("cached-PluginCfg.xml");
+
         if (cachedFile.exists()) {
             try {
                 
@@ -206,6 +209,10 @@ public class PluginGenerator {
     /** Wrapped method for getting the bundle context: required for test */
     protected BundleContext getBundleContext() {
         return FrameworkUtil.getBundle(PluginGenerator.class).getBundleContext();
+    }
+
+    private boolean isBundleUninstalled() {
+        return bundle.getState() == Bundle.UNINSTALLED;
     }
 
     /**
@@ -522,7 +529,7 @@ public class PluginGenerator {
                         for (TransportData currentTransport : sd.transports) {
                             Element tElem = output.createElement("Transport");
                             String hostname = currentTransport.host;
-
+                            
                             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
                                 Tr.debug(tc, "Adding the Transport definition " + hostname);
                             }
@@ -531,7 +538,6 @@ public class PluginGenerator {
                             tElem.setAttribute("Hostname", hostname);
                             String transportPort = Integer.toString(currentTransport.port);
                             tElem.setAttribute("Port", transportPort);
-
                             if (currentTransport.isSslEnabled) {
                                 tElem.setAttribute("Protocol", "https");
 
@@ -775,6 +781,7 @@ public class PluginGenerator {
 
             // Only write out to file if we have new or changed configuration information, or if this is an explicit request
             if (writeFile || !utilityRequest || !fileExists) {
+                // The bundle must not be uninstalled in order to write the file
                 // If writeFile is true write to the cachedFile and copy from there
                 // If writeFile is false and the cachedFile doesn't exist write to the cache file and copy from there
                 // If writeFile is false and cachedFile exists copy from there
@@ -799,6 +806,11 @@ public class PluginGenerator {
                         serializer.setOutputProperties(oprops);
                         serializer.transform(new DOMSource(output), new StreamResult(pluginCfgWriter));
                     }
+                } catch(IOException e){
+                    //path to the cachedFile is broken when bundle was uninstalled 
+                    if(!this.isBundleUninstalled()){ 
+                        throw e; // Missing for some other reason 
+                    }
                 } finally {
                     if (pluginCfgWriter != null) {
                         pluginCfgWriter.flush();
@@ -806,17 +818,14 @@ public class PluginGenerator {
                         fOutputStream.getFD().sync();
                         pluginCfgWriter.close();
                     }
-
                     try {
                         copyFile(cachedFile, outFile.asFile());
                     } catch (IOException e){
-                        //File no longer exists if the bundle was deactivated 
-                        Bundle bundle = FrameworkUtil.getBundle(PluginGenerator.class);
-                        if(bundle.getState() != bundle.UNINSTALLED){
+                        //cachedFile no longer exists if the bundle was uninstalled 
+                        if(!this.isBundleUninstalled()){
                             throw e; // Missing for some other reason 
                         }
-                    }
-                        
+                    }    
                 }
             } else {
                 if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
@@ -1856,6 +1865,7 @@ protected class XMLRootHandler extends DefaultHandler implements LexicalHandler 
             if (config.get("ESIEnableToPassCookies") != null) {
                 ESIEnableToPassCookies = (Boolean) config.get("ESIEnableToPassCookies");
             } // PI76699 End
+                
             TrustedProxyEnable = (Boolean) config.get("trustedProxyEnable");
             String proxyList = (String) config.get("trustedProxyGroup");
             if (proxyList != null) {

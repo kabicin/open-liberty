@@ -23,11 +23,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,9 +49,12 @@ import com.ibm.ws.logging.WsMessageRouter;
 import com.ibm.ws.logging.WsTraceRouter;
 import com.ibm.ws.logging.annotation.ThrowableAtMethod;
 import com.ibm.ws.logging.collector.CollectorConstants;
+import com.ibm.ws.logging.collector.CollectorJsonHelpers;
 import com.ibm.ws.logging.data.AccessLogData;
 import com.ibm.ws.logging.data.AuditData;
 import com.ibm.ws.logging.data.FFDCData;
+import com.ibm.ws.logging.data.JSONObject;
+import com.ibm.ws.logging.data.JSONObject.JSONObjectBuilder;
 import com.ibm.ws.logging.data.LogTraceData;
 import com.ibm.ws.logging.internal.NLSConstants;
 import com.ibm.ws.logging.internal.PackageProcessor;
@@ -222,10 +223,7 @@ public class BaseTraceService implements TrService {
 
     protected volatile String serverName = null;
     protected volatile String wlpUserDir = null;
-
-    private static Map<String, Set<String>> omitFieldsMap = new HashMap<>();
-    private static boolean isServerConfigUpdate = false;
-    private static boolean isServerConfigSetup = true;
+    private static final String OMIT_FIELDS_STRING = "@@@OMIT@@@";
 
     /** Flags for suppressing traceback output to the console */
     private static class StackTraceFlags {
@@ -311,7 +309,6 @@ public class BaseTraceService implements TrService {
     @Override
     public synchronized void update(LogProviderConfig config) {
         LogProviderConfigImpl trConfig = (LogProviderConfigImpl) config;
-        applyJsonFields(trConfig.getjsonFields(), trConfig.getOmitJsonFields());
         logHeader = trConfig.getLogHeader();
         javaLangInstrument = trConfig.hasJavaLangInstrument();
         consoleLogLevel = trConfig.getConsoleLogLevel();
@@ -332,6 +329,7 @@ public class BaseTraceService implements TrService {
             BaseTraceFormatter.useIsoDateFormat = isoDateFormat;
         }
 
+        applyJsonFields(trConfig.getjsonFields());
         initializeWriters(trConfig);
         if (hideMessageids.size() > 0) {
             String msgKey = isHpelEnabled ? "MESSAGES_CONFIGURED_HIDDEN_HPEL" : "MESSAGES_CONFIGURED_HIDDEN_2";
@@ -400,13 +398,12 @@ public class BaseTraceService implements TrService {
         commonConsoleLogHandlerUpdates();
 
         /*
-         * If messageFormat has been configured to 'basic' OR if messageFormat is neither basic nor json (default to basic)
+         * If messageFormat has been configured to 'simple' or the deprecated format name 'basic' OR if messageFormat is not a valid format (default to simple)
          * - ensure that we are not connecting conduits/bufferManagers to the handler
-         * otherwise we would have the undesired effect of writing both 'basic' and 'json' formatted message events
+         * otherwise we would have the undesired effect of writing both 'simple' and 'json' formatted message events
          */
-        if (messageFormat.toLowerCase().equals(LoggingConstants.DEFAULT_MESSAGE_FORMAT) ||
-            (!consoleFormat.toLowerCase().equals(LoggingConstants.DEFAULT_CONSOLE_FORMAT) &&
-             !consoleFormat.toLowerCase().equals(LoggingConstants.JSON_FORMAT))) {
+        if ((messageFormat.toLowerCase().equals(LoggingConstants.DEFAULT_MESSAGE_FORMAT) || messageFormat.toLowerCase().equals(LoggingConstants.DEPRECATED_DEFAULT_FORMAT))
+            || !(LoggingConfigUtils.isMessageFormatValueValid(messageFormat))) {
             if (messageLogHandler != null) {
                 messageLogHandler.setFormat(LoggingConstants.DEFAULT_MESSAGE_FORMAT);
                 messageLogHandler.modified(new ArrayList<String>());
@@ -417,16 +414,20 @@ public class BaseTraceService implements TrService {
         }
 
         /*
-         * If consoleFormat has been configured to 'basic' OR if consoleFormat is neither basic nor json (default to basic)
+         * If consoleFormat has been configured to 'dev' or the deprecated format name 'basic' or the default message format 'simple' OR if consoleFormat is not a valid format
+         * (default to dev)
          * - ensure that we are not connecting conduits/bufferManagers to the handler
-         * otherwise we would have the undesired effect of writing both 'basic' and 'json' formatted message events
+         * otherwise we would have the undesired effect of writing both 'dev'/'simple' and 'json' formatted message events
          */
-
-        if (consoleFormat.toLowerCase().equals(LoggingConstants.DEFAULT_CONSOLE_FORMAT) ||
-            (!consoleFormat.toLowerCase().equals(LoggingConstants.DEFAULT_CONSOLE_FORMAT) &&
-             !consoleFormat.toLowerCase().equals(LoggingConstants.JSON_FORMAT))) {
+        if ((consoleFormat.toLowerCase().equals(LoggingConstants.DEFAULT_CONSOLE_FORMAT) || consoleFormat.toLowerCase().equals(LoggingConstants.DEPRECATED_DEFAULT_FORMAT)
+             || consoleFormat.toLowerCase().equals(LoggingConstants.DEFAULT_MESSAGE_FORMAT))
+            || !(LoggingConfigUtils.isConsoleFormatValueValid(consoleFormat))) {
             if (consoleLogHandler != null) {
-                consoleLogHandler.setFormat(LoggingConstants.DEFAULT_CONSOLE_FORMAT);
+                if (consoleFormat.toLowerCase().equals(LoggingConstants.DEFAULT_MESSAGE_FORMAT))
+                    consoleLogHandler.setFormat(LoggingConstants.DEFAULT_MESSAGE_FORMAT);
+                else
+                    consoleLogHandler.setFormat(LoggingConstants.DEFAULT_CONSOLE_FORMAT);
+
                 ArrayList<String> filteredList = new ArrayList<String>();
                 filteredList.add(LoggingConstants.DEFAULT_CONSOLE_SOURCE);
                 if (traceLog == systemOut) {
@@ -473,50 +474,22 @@ public class BaseTraceService implements TrService {
         }
     }
 
-    public static Map<String, Set<String>> getOmitFieldsMap() {
-        return omitFieldsMap;
-    }
+    public static void applyJsonFields(String value) {
 
-    public static boolean getIsServerConfigUpdate() {
-        return isServerConfigUpdate;
-    }
-
-    public static void applyJsonFields(String value, Boolean omitJsonFields) {
-
-        if (!isServerConfigSetup)
-            isServerConfigUpdate = true;
-        else
-            isServerConfigSetup = false;
-
-        //env var omitJsonFields
-        if (omitJsonFields)
-            omitFieldsMap.clear(); //refresh for each server configuration update
-
-        if (isServerConfigUpdate) {
-            //env var omitJsonFields
-            if (omitJsonFields) {
-                AccessLogData.resetOmitFields();
-                FFDCData.resetOmitFields();
-                LogTraceData.resetOmitFieldsMessage();
-                LogTraceData.resetOmitFieldsTrace();
-                LogTraceData.resetExtFields();
-                AuditData.resetOmitFields();
-            }
+        if (value == null || value == "" || value.isEmpty()) { //reset all fields to original when server config has ""
             AccessLogData.resetJsonLoggingNameAliases();
             FFDCData.resetJsonLoggingNameAliases();
             LogTraceData.resetJsonLoggingNameAliasesMessage();
             LogTraceData.resetJsonLoggingNameAliasesTrace();
             AuditData.resetJsonLoggingNameAliases();
-        }
 
-        if (value == null || value == "" || value.isEmpty()) { //reset all fields to original when server config has ""
             //if no property is set, return
             return;
         }
 
         TraceComponent tc = Tr.register(LogTraceData.class, NLSConstants.GROUP, NLSConstants.LOGGING_NLS);
         boolean valueFound = false;
-        boolean isInvalidField = false;
+        boolean isInvalidEventType = false;
         Map<String, String> messageMap = new HashMap<>();
         Map<String, String> traceMap = new HashMap<>();
         Map<String, String> ffdcMap = new HashMap<>();
@@ -531,208 +504,89 @@ public class BaseTraceService implements TrService {
         String[] keyValuePairs = value.split(","); //split the string to create key-value pairs
         for (String pair : keyValuePairs) //iterate over the pairs
         {
-            String[] entry = pair.trim().split(":"); //split the pairs to get key and value
+            pair = pair.trim();
+            if (pair.endsWith(":"))
+                pair = pair + OMIT_FIELDS_STRING;
+
+            String[] entry = pair.split(":"); //split the pairs to get key and value
             entry[0] = entry[0].trim();
 
-            //env var omitJsonFields
-            if (pair.trim().endsWith(":") && omitJsonFields) { //FIND FIELDS THAT NEED TO BE OMITTED
-                Set<String> omitFieldsSet = new HashSet<>();
-                if (entry.length == 1) { //omit fields for all event types (just a field name)
-                    omitFieldsSet.add(entry[0]);
-
-                    if (LogTraceList.contains(entry[0])) {
-                        valueFound = true;
-                        if (omitFieldsMap.containsKey(CollectorConstants.MESSAGES_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.MESSAGES_CONFIG_VAL).add(entry[0]);
-                        } else if (!omitFieldsMap.containsKey(CollectorConstants.MESSAGES_CONFIG_VAL)) {
-                            omitFieldsMap.put(CollectorConstants.MESSAGES_CONFIG_VAL, omitFieldsSet);
-                        }
-                        if (omitFieldsMap.containsKey(CollectorConstants.TRACE_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.TRACE_CONFIG_VAL).add(entry[0]);
-                        } else if (!omitFieldsMap.containsKey(CollectorConstants.TRACE_CONFIG_VAL)) {
-                            omitFieldsMap.put(CollectorConstants.TRACE_CONFIG_VAL, omitFieldsSet);
-                        }
-                    }
-                    if (FFDCList.contains(entry[0])) {
-                        valueFound = true;
-                        if (omitFieldsMap.containsKey(CollectorConstants.FFDC_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.FFDC_CONFIG_VAL).add(entry[0]);
-                        } else {
-                            omitFieldsMap.put(CollectorConstants.FFDC_CONFIG_VAL, omitFieldsSet);
-                        }
-                    }
-                    if (AccessLogList.contains(entry[0])) {
-                        valueFound = true;
-                        if (omitFieldsMap.containsKey(CollectorConstants.ACCESS_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.ACCESS_CONFIG_VAL).add(entry[0]);
-                        } else {
-                            omitFieldsMap.put(CollectorConstants.ACCESS_CONFIG_VAL, omitFieldsSet);
-                        }
-                    }
-                    if (AuditList.contains(entry[0])) {
-                        valueFound = true;
-                        if (omitFieldsMap.containsKey(CollectorConstants.AUDIT_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.AUDIT_CONFIG_VAL).add(entry[0]);
-                        } else {
-                            omitFieldsMap.put(CollectorConstants.AUDIT_CONFIG_VAL, omitFieldsSet);
-                        }
-                    }
-                    //extensions
-                    if (entry[0].startsWith("ext_")) {
-                        valueFound = true;
-                        if (omitFieldsMap.containsKey(CollectorConstants.MESSAGES_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.MESSAGES_CONFIG_VAL).add(entry[0]);
-                        } else if (!omitFieldsMap.containsKey(CollectorConstants.MESSAGES_CONFIG_VAL)) {
-                            omitFieldsMap.put(CollectorConstants.MESSAGES_CONFIG_VAL, omitFieldsSet);
-                        }
-                        if (omitFieldsMap.containsKey(CollectorConstants.TRACE_CONFIG_VAL)) {
-                            omitFieldsMap.get(CollectorConstants.TRACE_CONFIG_VAL).add(entry[0]);
-                        } else if (!omitFieldsMap.containsKey(CollectorConstants.TRACE_CONFIG_VAL)) {
-                            omitFieldsMap.put(CollectorConstants.TRACE_CONFIG_VAL, omitFieldsSet);
-                        }
-                    }
-                    if (!valueFound) {
-                        //if the value does not exist in any of the known keys, give a warning
-                        Tr.warning(tc, "JSON_FIELDS_NO_MATCH");
-                    }
-                    valueFound = false;//reset valueFound boolean
-
-                } else if (entry.length == 2) { //omit fields for specific event types (event type and field name)
-                    omitFieldsSet.add(entry[1]);
-                    entry[1] = entry[1].trim();
-
-                    if (CollectorConstants.MESSAGES_CONFIG_VAL.equals(entry[0])) {
-                        if (LogTraceList.contains(entry[1]) || entry[1].startsWith("ext_")) {
-                            valueFound = true;
-                            if (omitFieldsMap.containsKey(entry[0])) {
-                                omitFieldsMap.get(entry[0]).add(entry[1]);
-                            } else {
-                                omitFieldsMap.put(entry[0], omitFieldsSet);
-                            }
-                        }
-                    } else if (CollectorConstants.TRACE_CONFIG_VAL.equals(entry[0])) {
-                        if (LogTraceList.contains(entry[1]) || entry[1].startsWith("ext_")) {
-                            valueFound = true;
-                            if (omitFieldsMap.containsKey(entry[0])) {
-                                omitFieldsMap.get(entry[0]).add(entry[1]);
-                            } else {
-                                omitFieldsMap.put(entry[0], omitFieldsSet);
-                            }
-                        }
-                    } else if (CollectorConstants.FFDC_CONFIG_VAL.equals(entry[0])) {
-                        if (FFDCList.contains(entry[1])) {
-                            valueFound = true;
-                            if (omitFieldsMap.containsKey(entry[0])) {
-                                omitFieldsMap.get(entry[0]).add(entry[1]);
-                            } else {
-                                omitFieldsMap.put(entry[0], omitFieldsSet);
-                            }
-                        }
-                    } else if (CollectorConstants.ACCESS_CONFIG_VAL.equals(entry[0])) {
-                        if (AccessLogList.contains(entry[1])) {
-                            valueFound = true;
-                            if (omitFieldsMap.containsKey(entry[0])) {
-                                omitFieldsMap.get(entry[0]).add(entry[1]);
-                            } else {
-                                omitFieldsMap.put(entry[0], omitFieldsSet);
-                            }
-                        }
-                    } else if (CollectorConstants.AUDIT_CONFIG_VAL.equals(entry[0])) {
-                        if (AuditList.contains(entry[1])) {
-                            valueFound = true;
-                            if (omitFieldsMap.containsKey(entry[0])) {
-                                omitFieldsMap.get(entry[0]).add(entry[1]);
-                            } else {
-                                omitFieldsMap.put(entry[0], omitFieldsSet);
-                            }
-                        }
-                    } else {
-                        isInvalidField = true;
-                        Tr.warning(tc, "JSON_FIELDS_INCORRECT_EVENT_TYPE");
-                    }
-                    if (!valueFound && !isInvalidField) {
-                        //if the value does not exist in any of the known keys, give a warning
-                        Tr.warning(tc, "JSON_FIELDS_NO_MATCH");
-                    }
-                    valueFound = false;
-                    isInvalidField = false;
+            //!pair.endsWith(":") for beta guard for entry length 2 because ie. message:type: will rename message to type
+            if (entry.length == 2) {//if the mapped value is intended for all event types
+                entry[1] = entry[1].trim();
+                //add properties to all the hashmaps and trim whitespaces
+                if (LogTraceList.contains(entry[0])) {
+                    messageMap.put(entry[0], entry[1]);
+                    traceMap.put(entry[0], entry[1]);
+                    valueFound = true;
                 }
-            } else { //jsonMappingFields implementation
-                if (entry.length == 2) {//if the mapped value is intended for all event types
-                    entry[1] = entry[1].trim();
-                    //add properties to all the hashmaps and trim whitespaces
-                    if (LogTraceList.contains(entry[0])) {
-                        messageMap.put(entry[0], entry[1]);
-                        traceMap.put(entry[0], entry[1]);
-                        valueFound = true;
-                    }
-                    if (FFDCList.contains(entry[0])) {
-                        ffdcMap.put(entry[0], entry[1]);
-                        valueFound = true;
-                    }
-                    if (AccessLogList.contains(entry[0])) {
-                        accessLogMap.put(entry[0], entry[1]);
-                        valueFound = true;
-                    }
-                    if (AuditList.contains(entry[0])) {
-                        auditMap.put(entry[0], entry[1]);
-                        valueFound = true;
-                    }
-                    //Check if mapped value is an extension
-                    if (entry[0].startsWith("ext_")) {
-                        messageMap.put(entry[0], entry[1]);
-                        traceMap.put(entry[0], entry[1]);
-                        valueFound = true;
-                    }
-                    if (!valueFound) {
-                        //if the value does not exist in any of the known keys, give a warning
-                        Tr.warning(tc, "JSON_FIELDS_NO_MATCH");
-                    }
-                    valueFound = false;//reset valueFound boolean
+                if (FFDCList.contains(entry[0])) {
+                    ffdcMap.put(entry[0], entry[1]);
+                    valueFound = true;
+                }
+                if (AccessLogList.contains(entry[0])) {
+                    accessLogMap.put(entry[0], entry[1]);
+                    valueFound = true;
+                }
+                if (AuditList.contains(entry[0])) {
+                    auditMap.put(entry[0], entry[1]);
+                    valueFound = true;
+                }
+                //Check if mapped value is an extension
+                if (entry[0].startsWith("ext_")) {
+                    messageMap.put(entry[0], entry[1]);
+                    traceMap.put(entry[0], entry[1]);
+                    valueFound = true;
+                }
+                if (!valueFound) {
+                    //if the value does not exist in any of the known keys, give a warning
+                    Tr.warning(tc, "JSON_FIELDS_NO_MATCH");
+                }
+                valueFound = false;//reset valueFound boolean
 
-                } else if (entry.length == 3) {
-                    entry[1] = entry[1].trim();
-                    entry[2] = entry[2].trim();
-                    //add properties to their respective hashmaps and trim whitespaces
-                    if (CollectorConstants.MESSAGES_CONFIG_VAL.equals(entry[0])) {
-                        if (LogTraceList.contains(entry[1]) || entry[1].startsWith("ext_")) {
-                            messageMap.put(entry[1], entry[2]);
-                            valueFound = true;
-                        }
-                    } else if (CollectorConstants.TRACE_CONFIG_VAL.equals(entry[0])) {
-                        if (LogTraceList.contains(entry[1]) || entry[1].startsWith("ext_")) {
-                            traceMap.put(entry[1], entry[2]);
-                            valueFound = true;
-                        }
-                    } else if (CollectorConstants.FFDC_CONFIG_VAL.equals(entry[0])) {
-                        if (FFDCList.contains(entry[1])) {
-                            ffdcMap.put(entry[1], entry[2]);
-                            valueFound = true;
-                        }
-                    } else if (CollectorConstants.ACCESS_CONFIG_VAL.equals(entry[0])) {
-                        if (AccessLogList.contains(entry[1])) {
-                            accessLogMap.put(entry[1], entry[2]);
-                            valueFound = true;
-                        }
-                    } else if (CollectorConstants.AUDIT_CONFIG_VAL.equals(entry[0])) {
-                        if (AuditList.contains(entry[1])) {
-                            auditMap.put(entry[1], entry[2]);
-                            valueFound = true;
-                        }
-                    } else {
-                        isInvalidField = true;
-                        Tr.warning(tc, "JSON_FIELDS_INCORRECT_EVENT_TYPE");
+            } else if (entry.length == 3) {
+                entry[1] = entry[1].trim();
+                entry[2] = entry[2].trim();
+                //add properties to their respective hashmaps and trim whitespaces
+                if (CollectorConstants.MESSAGES_CONFIG_VAL.equals(entry[0])) {
+                    if (LogTraceList.contains(entry[1]) || entry[1].startsWith("ext_")) {
+                        messageMap.put(entry[1], entry[2]);
+                        valueFound = true;
                     }
-                    if (!valueFound && !isInvalidField) {
-                        //if the value does not exist in any of the known keys, give a warning
-                        Tr.warning(tc, "JSON_FIELDS_NO_MATCH");
+                } else if (CollectorConstants.TRACE_CONFIG_VAL.equals(entry[0])) {
+                    if (LogTraceList.contains(entry[1]) || entry[1].startsWith("ext_")) {
+                        traceMap.put(entry[1], entry[2]);
+                        valueFound = true;
                     }
-                    valueFound = false;
-                    isInvalidField = false;
+                } else if (CollectorConstants.FFDC_CONFIG_VAL.equals(entry[0])) {
+                    if (FFDCList.contains(entry[1])) {
+                        ffdcMap.put(entry[1], entry[2]);
+                        valueFound = true;
+                    }
+                } else if (CollectorConstants.ACCESS_CONFIG_VAL.equals(entry[0])) {
+                    if (AccessLogList.contains(entry[1])) {
+                        accessLogMap.put(entry[1], entry[2]);
+                        valueFound = true;
+                    }
+                } else if (CollectorConstants.AUDIT_CONFIG_VAL.equals(entry[0])) {
+                    if (AuditList.contains(entry[1])) {
+                        auditMap.put(entry[1], entry[2]);
+                        valueFound = true;
+                    }
                 } else {
-                    Tr.warning(tc, "JSON_FIELDS_FORMAT_WARNING_2");
+                    isInvalidEventType = true;
+                    Tr.warning(tc, "JSON_FIELDS_INCORRECT_EVENT_TYPE");
                 }
+                if (!valueFound && !isInvalidEventType) {
+                    //if the value does not exist in any of the known keys, give a warning
+                    Tr.warning(tc, "JSON_FIELDS_NO_MATCH");
+                }
+                valueFound = false;
+                isInvalidEventType = false;
+            } else {
+                Tr.warning(tc, "JSON_FIELDS_FORMAT_WARNING_2");
             }
+
         }
 
         AccessLogData.newJsonLoggingNameAliases(accessLogMap);
@@ -741,13 +595,7 @@ public class BaseTraceService implements TrService {
         LogTraceData.newJsonLoggingNameAliasesTrace(traceMap);
         AuditData.newJsonLoggingNameAliases(auditMap);
 
-        if (omitJsonFields) {
-            AccessLogData.setOmitFields(omitFieldsMap.get(CollectorConstants.ACCESS_CONFIG_VAL));
-            FFDCData.setOmitFields(omitFieldsMap.get(CollectorConstants.FFDC_CONFIG_VAL));
-            LogTraceData.setOmitFieldsMessage(omitFieldsMap.get(CollectorConstants.MESSAGES_CONFIG_VAL));
-            LogTraceData.setOmitFieldsTrace(omitFieldsMap.get(CollectorConstants.TRACE_CONFIG_VAL));
-            AuditData.setOmitFields(omitFieldsMap.get(CollectorConstants.AUDIT_CONFIG_VAL));
-        }
+        CollectorJsonHelpers.updateFieldMappings();
     }
 
     /**
@@ -1353,22 +1201,19 @@ public class BaseTraceService implements TrService {
         String datetime = getDatetime();
         String sequenceNumber = getSequenceNumber();
         //construct json header
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"type\":\"liberty_message\"");
-        sb.append(",\"host\":\"");
-        jsonEscape(sb, serverHostName);
-        sb.append("\",\"ibm_userDir\":\"");
-        jsonEscape(sb, wlpUserDir);
-        sb.append("\",\"ibm_serverName\":\"");
-        jsonEscape(sb, serverName);
-        sb.append("\",\"message\":\"");
-        jsonEscape(sb, logHeader);
-        sb.append("\",\"ibm_datetime\":\"");
-        jsonEscape(sb, datetime);
-        sb.append("\",\"ibm_sequence\":\"");
-        jsonEscape(sb, sequenceNumber);
-        sb.append("\"}\n");
-        return sb.toString();
+        JSONObjectBuilder jsonBuilder = new JSONObject.JSONObjectBuilder();
+
+        //@formatter:off
+        jsonBuilder.addField(LogTraceData.getTypeKeyJSON(true), "liberty_message", false, false)
+        .addField(LogTraceData.getHostKeyJSON(true), serverHostName, false, true)
+        .addField(LogTraceData.getUserDirKeyJSON(true), wlpUserDir, false, true)
+        .addField(LogTraceData.getServerNameKeyJSON(true), serverName, false, true)
+        .addField(LogTraceData.getMessageKeyJSON(true), logHeader, false, true)
+        .addField(LogTraceData.getDatetimeKeyJSON(true), datetime, false, true)
+        .addField(LogTraceData.getSequenceKeyJSON(true), sequenceNumber, false, true);
+        //@formatter:on
+
+        return jsonBuilder.build().toString().concat("\n");
     }
 
     private String getSequenceNumber() {
@@ -1419,49 +1264,6 @@ public class BaseTraceService implements TrService {
             serverHostName = containerHost;
         }
         return serverHostName;
-    }
-
-    /**
-     * Escape \b, \f, \n, \r, \t, ", \, / characters and appends to a string builder
-     *
-     * @param sb String builder to append to
-     * @param s String to escape
-     */
-    private void jsonEscape(StringBuilder sb, String s) {
-        if (s == null) {
-            sb.append(s);
-            return;
-        }
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '\b':
-                    sb.append("\\b");
-                    break;
-                case '\f':
-                    sb.append("\\f");
-                    break;
-                case '\n':
-                    sb.append("\\n");
-                    break;
-                case '\r':
-                    sb.append("\\r");
-                    break;
-                case '\t':
-                    sb.append("\\t");
-                    break;
-
-                // Fall through because we just need to add \ (escaped) before the character
-                case '\\':
-                case '\"':
-                case '/':
-                    sb.append("\\");
-                    sb.append(c);
-                    break;
-                default:
-                    sb.append(c);
-            }
-        }
     }
 
     public final static class SystemLogHolder extends Level implements TraceWriter {
