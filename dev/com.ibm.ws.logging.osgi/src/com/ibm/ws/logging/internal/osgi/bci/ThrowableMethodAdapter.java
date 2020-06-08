@@ -24,17 +24,16 @@ import org.objectweb.asm.Type;
  *
  */
 class ThrowableMethodAdapter extends MethodVisitor implements Opcodes {
-    private String currentClass = null;
+
     private final String name;
     private final String desc;
     private final String signature;
 
-    public ThrowableMethodAdapter(MethodVisitor mv, String name, String desc, String signature, String className) {
+    public ThrowableMethodAdapter(MethodVisitor mv, String name, String desc, String signature) {
         super(ASM7, mv);
         this.name = name;
         this.desc = desc;
         this.signature = signature;
-        this.currentClass = className;
     }
     
     @Override

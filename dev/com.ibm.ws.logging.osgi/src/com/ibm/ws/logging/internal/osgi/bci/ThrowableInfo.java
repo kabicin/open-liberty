@@ -21,7 +21,6 @@ public class ThrowableInfo {
 
     private final Instrumentation inst;
     private Method btsMethod;
-    private Object btsInstance;
 
     public ThrowableInfo(Instrumentation inst) {
         this.inst = inst;
@@ -40,15 +39,6 @@ public class ThrowableInfo {
 	                    setBtsMethod(method);
 	                } 
 	            }
-	        }
-	        try {
-	            setBtsInstance(btsClass.newInstance());
-	        } catch (InstantiationException e) {
-	            // TODO Auto-generated catch block
-	            e.printStackTrace();
-	        } catch (IllegalAccessException e) {
-	            // TODO Auto-generated catch block
-	            e.printStackTrace();
 	        }
         }
         else {
@@ -76,13 +66,5 @@ public class ThrowableInfo {
 
     public Method getBtsMethod() {
         return btsMethod;
-    }
-
-    private void setBtsInstance(Object instance) {
-        btsInstance = instance;
-    }
-
-    public Object getBtsInstance() {
-        return btsInstance;
     }
 }

@@ -1623,7 +1623,7 @@ public class BaseTraceService implements TrService {
     }
 
     @ThrowableAtMethod
-    public boolean printStackTraceOverride(Throwable t, PrintStream originalStream) {
+    public static boolean printStackTraceOverride(Throwable t, PrintStream originalStream) {
         if ((originalStream == System.err || originalStream == System.out) && !traceFlags.get().isPrintingStackTrace) {
             traceFlags.get().isPrintingStackTrace = true;
             t.printStackTrace(originalStream);

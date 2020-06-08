@@ -368,7 +368,7 @@ public class ThrowableProxyActivator {
         Method method = throwableInfo.getBtsMethod();
         Boolean b = Boolean.FALSE;
         try {
-            b = (Boolean) method.invoke(throwableInfo.getBtsInstance(), t, originalStream);
+            b = (Boolean) method.invoke(null, t, originalStream);
         } catch (Exception e) {
             e.printStackTrace();
         }
