@@ -315,7 +315,6 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
             lock.readLock().unlock();
         }
         return "";
-        
     }
 
     /** {@inheritDoc} */

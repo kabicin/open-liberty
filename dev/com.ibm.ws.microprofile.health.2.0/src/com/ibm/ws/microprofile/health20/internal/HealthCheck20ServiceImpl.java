@@ -105,8 +105,7 @@ public class HealthCheck20ServiceImpl implements HealthCheck20Service {
             String appName = appsIt.next();
             if(appTracker.isInstalled(appName)) {
                 anyAppsInstalled = true;
-            }
-            else if (!appTracker.isUninstalled(appName) && !appTracker.isStarted(appName)) {
+            } else if (!appTracker.isUninstalled(appName) && !appTracker.isStarted(appName)) {
                 if (tc.isDebugEnabled())
                     Tr.debug(tc, "In performHealthCheck(): Application : " + appName + " has not started yet.");
                 if (!(healthCheckProcedure.equals(HealthCheckConstants.HEALTH_CHECK_LIVE))) {
@@ -116,10 +115,19 @@ public class HealthCheck20ServiceImpl implements HealthCheck20Service {
                         unstartedAppsSet.add(appName);
                     }
                     if (tc.isDebugEnabled())
-                        Tr.debug(tc, "In performHealthCheck(): unstartedAppsSet after adding the unstarted app : " + unstartedAppsSet);
-                } else {
-                    // for liveness check
-                    hcHttpResponseBuilder.setOverallState(State.UP);
+                        Tr.debug(tc, "In performHealthCheck(): Application : " + appName + " has not started yet.");
+                    if (!(healthCheckProcedure.equals(HealthCheckConstants.HEALTH_CHECK_LIVE))) {
+                        hcHttpResponseBuilder.setOverallState(State.DOWN);
+                        // Keep track of the unstarted applications names
+                        if (!unstartedAppsSet.contains(appName)) {
+                            unstartedAppsSet.add(appName);
+                        }
+                        if (tc.isDebugEnabled())
+                            Tr.debug(tc, "In performHealthCheck(): unstartedAppsSet after adding the unstarted app : " + unstartedAppsSet);
+                    } else {
+                        // for liveness check
+                        hcHttpResponseBuilder.setOverallState(State.UP);
+                    }
                 }
             } else {
                 Set<String> modules = appTracker.getModuleNames(appName);
