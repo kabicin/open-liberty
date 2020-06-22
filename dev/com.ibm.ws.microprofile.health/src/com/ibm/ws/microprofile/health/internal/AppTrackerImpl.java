@@ -29,7 +29,6 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -341,7 +340,6 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
             }
             return;
         }
-
 
         // Process the application to check if it is a WAR or an EAR file and unregister it.
         processApplication(appContainer, appInfo, appName, true);
