@@ -103,52 +103,49 @@ public class HealthCheck20ServiceImpl implements HealthCheck20Service {
 
         while (appsIt.hasNext()) {
             String appName = appsIt.next();
-            if (!appTracker.isUninstalled(appName) && !appTracker.isStarted(appName)) {
-                if (!appTracker.isInstalled(appName)) {
-                    if (tc.isDebugEnabled())
-                        Tr.debug(tc, "In performHealthCheck(): Application : " + appName + " has not started yet.");
-                    if (!(healthCheckProcedure.equals(HealthCheckConstants.HEALTH_CHECK_LIVE))) {
-                        hcHttpResponseBuilder.setOverallState(State.DOWN);
-                        // Keep track of the unstarted applications names
-                        if (!unstartedAppsSet.contains(appName)) {
-                            unstartedAppsSet.add(appName);
-                        }
-                        if (tc.isDebugEnabled())
-                            Tr.debug(tc, "In performHealthCheck(): unstartedAppsSet after adding the unstarted app : " + unstartedAppsSet);
-                    } else {
-                        // for liveness check
-                        hcHttpResponseBuilder.setOverallState(State.UP);
-                    }
-                } else if (!appTracker.isMBeanRemoved(appName)) {
-                    anyAppsInstalled = true;
-                }
-                // Continue and check the state of the other deployed applications
-                continue;
+            if(appTracker.isInstalled(appName)) {
+                anyAppsInstalled = true;
             }
-
-            Set<String> modules = appTracker.getModuleNames(appName);
-            if (modules != null) {
-                Iterator<String> moduleIt = modules.iterator();
-
-                while (moduleIt.hasNext()) {
-                    String moduleName = moduleIt.next();
-                    if (tc.isDebugEnabled())
-                        Tr.debug(tc, "In performHealthCheck(): appName = " + appName + ", moduleName = " + moduleName);
-
-                    try {
-                        hcResponses = hcExecutor.runHealthChecks(appName, moduleName, healthCheckProcedure);
-                    } catch (HealthCheckBeanCallException e) {
-                        if (tc.isDebugEnabled())
-                            Tr.debug(tc, "In performHealthCheck(): Caught the exception " + e + " for appName = " + appName + ", moduleName = " + moduleName);
-                        hcHttpResponseBuilder.handleUndeterminedResponse(httpResponse);
-                        return;
+            else if (!appTracker.isUninstalled(appName) && !appTracker.isStarted(appName)) {
+                if (tc.isDebugEnabled())
+                    Tr.debug(tc, "In performHealthCheck(): Application : " + appName + " has not started yet.");
+                if (!(healthCheckProcedure.equals(HealthCheckConstants.HEALTH_CHECK_LIVE))) {
+                    hcHttpResponseBuilder.setOverallState(State.DOWN);
+                    // Keep track of the unstarted applications names
+                    if (!unstartedAppsSet.contains(appName)) {
+                        unstartedAppsSet.add(appName);
                     }
-
                     if (tc.isDebugEnabled())
-                        Tr.debug(tc, "In performHealthCheck(): hcResponses = " + hcResponses);
+                        Tr.debug(tc, "In performHealthCheck(): unstartedAppsSet after adding the unstarted app : " + unstartedAppsSet);
+                } else {
+                    // for liveness check
+                    hcHttpResponseBuilder.setOverallState(State.UP);
+                }
+            } else {
+                Set<String> modules = appTracker.getModuleNames(appName);
+                if (modules != null) {
+                    Iterator<String> moduleIt = modules.iterator();
 
-                    if (!hcResponses.isEmpty())
-                        hcHttpResponseBuilder.addResponses(hcResponses);
+                    while (moduleIt.hasNext()) {
+                        String moduleName = moduleIt.next();
+                        if (tc.isDebugEnabled())
+                            Tr.debug(tc, "In performHealthCheck(): appName = " + appName + ", moduleName = " + moduleName);
+
+                        try {
+                            hcResponses = hcExecutor.runHealthChecks(appName, moduleName, healthCheckProcedure);
+                        } catch (HealthCheckBeanCallException e) {
+                            if (tc.isDebugEnabled())
+                                Tr.debug(tc, "In performHealthCheck(): Caught the exception " + e + " for appName = " + appName + ", moduleName = " + moduleName);
+                            hcHttpResponseBuilder.handleUndeterminedResponse(httpResponse);
+                            return;
+                        }
+
+                        if (tc.isDebugEnabled())
+                            Tr.debug(tc, "In performHealthCheck(): hcResponses = " + hcResponses);
+
+                        if (!hcResponses.isEmpty())
+                            hcHttpResponseBuilder.addResponses(hcResponses);
+                    }
                 }
             }
 

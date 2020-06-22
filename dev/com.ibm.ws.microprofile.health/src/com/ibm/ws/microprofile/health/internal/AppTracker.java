@@ -106,14 +106,6 @@ public interface AppTracker {
     boolean isUninstalled(String appName);
 
     /**
-     * Returns true if the application MBean is removed, otherwise false.
-     *
-     * @param appName
-     * @return true if the application MBean is removed, otherwise false.
-     */
-    boolean isMBeanRemoved(String appName);
-
-    /**
      * Sets the HealthCheckService associated with this AppTracker.
      *
      * @param healthService

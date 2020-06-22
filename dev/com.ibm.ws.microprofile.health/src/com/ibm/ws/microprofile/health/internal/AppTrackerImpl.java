@@ -262,7 +262,14 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
     public boolean isInstalled(String appName) {
         lock.readLock().lock();
         try {
-            if (appStateMap.get(appName) == ApplicationState.INSTALLED) {
+            String state = getApplicationMBean(appName);
+            if (state.isEmpty()) {
+                appStateMap.replace(appName, null);
+            }
+            else if (state.equals("INSTALLED")) {
+                if (appStateMap.get(appName) != ApplicationState.INSTALLED) {
+                    appStateMap.replace(appName, ApplicationState.INSTALLED);
+                }
                 return true;
             }
         } finally {
@@ -290,37 +297,25 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
     }
 
     /**
-     * Returns true if the application MBean is removed, otherwise false.
-     *
-     * @return true if the application MBean is removed, otherwise false.
-     */
-    @Override
-    public boolean isMBeanRemoved(String appName) {
-        lock.readLock().lock();
-        try {
-            if (getApplicationMBean(appName) == null) {
-                appStateMap.replace(appName, null);
-                return true;
-            }
-        } finally {
-            lock.readLock().unlock();
-        }
-        return false;
-    }
-
-    /**
      * Returns the MBeanInfo of appName if the ApplicationMBean exists, otherwise null.
      *
      * @return the MBeanInfo of appName if the ApplicationMBean exists, otherwise null.
      */
-    private MBeanInfo getApplicationMBean(String appName) {
-        MBeanInfo bean = null;
+    private String getApplicationMBean(String appName) {
+        lock.readLock().lock();
         try {
-            ObjectName objectName = new ObjectName("WebSphere:service=com.ibm.websphere.application.ApplicationMBean,name=" + appName);
-            bean = mbeanServer.getMBeanInfo(objectName);
-        } catch (Exception e) {
+            MBeanInfo bean = null;
+            try {
+                ObjectName objectName = new ObjectName("WebSphere:service=com.ibm.websphere.application.ApplicationMBean,name=" + appName);
+                bean = mbeanServer.getMBeanInfo(objectName);
+                String state = (String) mbeanServer.getAttribute(objectName, "State");
+                return state;
+            } catch (Exception e) {}
+        } finally {
+            lock.readLock().unlock();
         }
-        return bean;
+        return "";
+        
     }
 
     /** {@inheritDoc} */
@@ -348,11 +343,11 @@ public class AppTrackerImpl implements AppTracker, ApplicationStateListener {
         lock.writeLock().lock();
         try {
             if (appStateMap.containsKey(appName)) {
-                if (appStateMap.get(appName) != ApplicationState.STARTED) {
-                    appStateMap.replace(appName, ApplicationState.INSTALLED);
-                } else {
-                    appStateMap.remove(appName);
-                }
+               if (appStateMap.get(appName) != ApplicationState.STARTED) {
+                   appStateMap.replace(appName, ApplicationState.INSTALLED);
+               } else {
+                   appStateMap.remove(appName);
+               }
             }
         } finally {
             lock.writeLock().unlock();
