@@ -22,7 +22,8 @@ import com.ibm.ws.microprofile.health20.fat.MultipleHealthCheckTest;
 @SuiteClasses({
                 DelayAppStartupHealthCheckTest.class,
                 MultipleHealthCheckTest.class,
-                DifferentApplicationNameHealthCheckTest.class
+                DifferentApplicationNameHealthCheckTest.class,
+                FailsToStartHealthCheckTest.class
 })
 
 public class FATSuite {
