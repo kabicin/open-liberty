@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 1997, 2007 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -74,7 +74,8 @@ public class ServletCacheEngine implements CacheManager {
 			}
 			
 			if (null != s.getServletConfig()){
-				String contextRoot = s.getServletConfig().getServletContext().getContextPath(); 
+				String contextRoot = s.getServletConfig().getServletContext().getContextPath().isEmpty() ? 
+		                    "/" : s.getServletConfig().getServletContext().getContextPath();
 				if (null != getServletCache() || !excludedServlets.contains(name)) {
 					if (contextRootsWithCachespecXMLs.contains(contextRoot)) {
 						s = new ServletWrapper(s);

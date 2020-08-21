@@ -1,12 +1,12 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2018 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *     IBM Corporation - initial API and implementation
+ * IBM Corporation - initial API and implementation
  *******************************************************************************/
 package com.ibm.ws.security.social.internal.utils;
 
@@ -30,8 +30,11 @@ import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.websphere.security.cred.WSCredential;
 import com.ibm.ws.security.common.web.CommonWebConstants;
 import com.ibm.ws.security.social.Constants;
+import com.ibm.ws.security.social.SocialLoginConfig;
 import com.ibm.ws.security.social.TraceConstants;
 import com.ibm.ws.security.social.error.SocialLoginException;
+import com.ibm.ws.security.social.internal.Oauth2LoginConfigImpl;
+import com.ibm.ws.security.social.internal.OkdServiceLoginImpl;
 
 /**
  * Collection of utility methods for String to byte[] conversion.
@@ -237,6 +240,19 @@ public class SocialUtil {
         if (!SocialUtil.validateQueryString(query)) {
             throw new SocialLoginException("EXCEPTION_INITIALIZING_URL", null, new Object[] { endpointUrl, "" });
         }
+    }
+
+    public static boolean isKubeConfig(SocialLoginConfig clientConfig) {
+        String userApiType = clientConfig.getUserApiType();
+        return (userApiType != null && Oauth2LoginConfigImpl.USER_API_TYPE_KUBE.equals(userApiType));
+    }
+
+    public static boolean isOkdConfig(SocialLoginConfig config) {
+        return config.getClass().getName().equals(OkdServiceLoginImpl.class.getName());
+    }
+
+    public static boolean useAccessTokenFromRequest(SocialLoginConfig clientConfig) {
+        return (clientConfig.isAccessTokenRequired() || clientConfig.isAccessTokenSupported());
     }
 
 }

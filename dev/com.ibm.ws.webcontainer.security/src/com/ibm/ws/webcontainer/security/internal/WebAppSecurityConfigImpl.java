@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2018 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -27,6 +27,8 @@ import com.ibm.ws.webcontainer.security.WebAppSecurityCollaboratorImpl;
 import com.ibm.ws.webcontainer.security.WebAppSecurityConfig;
 import com.ibm.ws.webcontainer.security.WebAuthenticatorProxy;
 import com.ibm.ws.webcontainer.security.metadata.LoginConfiguration;
+import com.ibm.ws.webcontainer.security.openidconnect.OidcClient;
+import com.ibm.ws.webcontainer.security.openidconnect.OidcServer;
 import com.ibm.wsspi.kernel.service.location.WsLocationAdmin;
 import com.ibm.wsspi.kernel.service.utils.AtomicServiceReference;
 
@@ -68,6 +70,7 @@ public class WebAppSecurityConfigImpl implements WebAppSecurityConfig {
     public static final String CFG_KEY_OVERRIDE_HAM = "overrideHttpAuthMethod";
     public static final String CFG_KEY_LOGIN_FORM_CONTEXT_ROOT = "contextRootForFormAuthenticationMechanism";
     public static final String CFG_KEY_BASIC_AUTH_REALM_NAME = "basicAuthenticationMechanismRealmName";
+    public static final String CFG_KEY_SAME_SITE_COOKIE = "sameSiteCookie";
 
     // New attributes must update getChangedProperties method
     private final Boolean logoutOnHttpSessionExpire;
@@ -98,9 +101,12 @@ public class WebAppSecurityConfigImpl implements WebAppSecurityConfig {
     private final String overrideHttpAuthMethod;
     private final String loginFormContextRoot;
     private final String basicAuthRealmName;
+    private final String sameSiteCookie;
 
     protected final AtomicServiceReference<WsLocationAdmin> locationAdminRef;
     protected final AtomicServiceReference<SecurityService> securityServiceRef;
+    protected final AtomicServiceReference<OidcServer> oidcServerRef;
+    protected final AtomicServiceReference<OidcClient> oidcClientRef;
 
     static Map<String, String> configAttributes = new TreeMap<String, String>() {
         /**  */
@@ -134,14 +140,22 @@ public class WebAppSecurityConfigImpl implements WebAppSecurityConfig {
             put(CFG_KEY_OVERRIDE_HAM, "overrideHttpAuthMethod");
             put(CFG_KEY_LOGIN_FORM_CONTEXT_ROOT, "loginFormContextRoot");
             put(CFG_KEY_BASIC_AUTH_REALM_NAME, "basicAuthRealmName");
+            put(CFG_KEY_SAME_SITE_COOKIE, "sameSiteCookie");
+
         }
     };
 
     public WebAppSecurityConfigImpl(Map<String, Object> newProperties,
                                     AtomicServiceReference<WsLocationAdmin> locationAdminRef,
-                                    AtomicServiceReference<SecurityService> securityServiceRef) {
+                                    AtomicServiceReference<SecurityService> securityServiceRef,
+                                    AtomicServiceReference<OidcServer> oidcServerRef,
+                                    AtomicServiceReference<OidcClient> oidcClientRef) {
         this.locationAdminRef = locationAdminRef;
         this.securityServiceRef = securityServiceRef;
+        this.oidcServerRef = oidcServerRef;
+        this.oidcClientRef = oidcClientRef;
+        setSsoCookieName(oidcServerRef, oidcClientRef);
+
         logoutOnHttpSessionExpire = (Boolean) newProperties.get(CFG_KEY_LOGOUT_ON_HTTP_SESSION_EXPIRE);
         singleSignonEnabled = (Boolean) newProperties.get(CFG_KEY_SINGLE_SIGN_ON_ENABLED);
         preserveFullyQualifiedReferrerUrl = (Boolean) newProperties.get(CFG_KEY_PRESERVE_FULLY_QUALIFIED_REFERRER_URL);
@@ -170,24 +184,8 @@ public class WebAppSecurityConfigImpl implements WebAppSecurityConfig {
         overrideHttpAuthMethod = (String) newProperties.get(CFG_KEY_OVERRIDE_HAM);
         loginFormContextRoot = (String) newProperties.get(CFG_KEY_LOGIN_FORM_CONTEXT_ROOT);
         basicAuthRealmName = (String) newProperties.get(CFG_KEY_BASIC_AUTH_REALM_NAME);
+        sameSiteCookie = (String) newProperties.get(CFG_KEY_SAME_SITE_COOKIE);
         WebAppSecurityCollaboratorImpl.setGlobalWebAppSecurityConfig(this);
-    }
-
-    /**
-     *
-     */
-    protected String resolveSsoCookieName(Map<String, Object> newProperties) {
-        String genCookieName = null;
-        String cookieName = (String) newProperties.get(CFG_KEY_SSO_COOKIE_NAME);
-        if (DEFAULT_SSO_COOKIE_NAME.equalsIgnoreCase(cookieName) && autoGenSsoCookieName) {
-            genCookieName = generateSsoCookieName();
-        }
-
-        if (genCookieName != null) {
-            return genCookieName;
-        } else {
-            return cookieName;
-        }
     }
 
     /**
@@ -519,6 +517,52 @@ public class WebAppSecurityConfigImpl implements WebAppSecurityConfig {
         return output;
     }
 
+    /*
+     * This method set the runtime auto generate cookie name for OIDC server and client.
+     */
+    public void setSsoCookieName(AtomicServiceReference<OidcServer> oidcServerRef,
+                                 AtomicServiceReference<OidcClient> oidcClientRef) {
+        if (DEFAULT_SSO_COOKIE_NAME.equalsIgnoreCase(ssoCookieName) && isRunTimeAutoGenSsoCookieName()) {
+            String genCookieName = generateSsoCookieName();
+            if (genCookieName != null) {
+                ssoCookieName = genCookieName;
+                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                    Tr.debug(tc, "auto generate ssoCookieName: ", ssoCookieName);
+                }
+            }
+        }
+    }
+
+    /**
+     *
+     */
+    protected String resolveSsoCookieName(Map<String, Object> newProperties) {
+        String genCookieName = null;
+        String cookieName = (String) newProperties.get(CFG_KEY_SSO_COOKIE_NAME);
+        if (DEFAULT_SSO_COOKIE_NAME.equalsIgnoreCase(cookieName) &&
+            (autoGenSsoCookieName || isRunTimeAutoGenSsoCookieName())) {
+            genCookieName = generateSsoCookieName();
+        }
+
+        if (genCookieName != null) {
+            return genCookieName;
+        } else {
+            return cookieName;
+        }
+    }
+
+    /*
+     * This method will turn on the auto generation SSO cookie name if OIDC client and/or server services
+     * available.
+     */
+    private boolean isRunTimeAutoGenSsoCookieName() {
+        if ((oidcClientRef != null && oidcClientRef.getService() != null) ||
+            (oidcServerRef != null && oidcServerRef.getService() != null && !oidcServerRef.getService().allowDefaultSsoCookieName()))
+            return true;
+        else
+            return false;
+    }
+
     /** {@inheritDoc} */
     @Override
     public SSOCookieHelper createSSOCookieHelper() {
@@ -534,6 +578,11 @@ public class WebAppSecurityConfigImpl implements WebAppSecurityConfig {
     /** {@inheritDoc} */
     @Override
     public WebAuthenticatorProxy createWebAuthenticatorProxy() {
-        return new WebAuthenticatorProxy(this, null, securityServiceRef, null);
+        return new WebAuthenticatorProxy(this, null, securityServiceRef, null, oidcServerRef);
+    }
+
+    @Override
+    public String getSameSiteCookie() {
+        return sameSiteCookie;
     }
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012, 2013 IBM Corporation and others.
+ * Copyright (c) 2012, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -20,7 +20,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.StringTokenizer;
 
 import javax.annotation.Resource;
 import javax.annotation.Resource.AuthenticationType;
@@ -43,12 +42,13 @@ import com.ibm.ws.anno.info.internal.InfoStoreFactoryImpl;
 import com.ibm.ws.anno.info.internal.InfoStoreImpl;
 import com.ibm.ws.anno.info.internal.NonDelayedClassInfo;
 import com.ibm.ws.anno.service.internal.AnnotationServiceImpl_Service;
+import com.ibm.ws.anno.targets.internal.AnnotationTargetsImpl_Factory;
 import com.ibm.ws.anno.test.data.BClass;
 import com.ibm.ws.anno.test.data.CIntf;
 import com.ibm.ws.anno.test.data.DerivedBase;
 import com.ibm.ws.anno.test.data.sub.InheritAnno;
 import com.ibm.ws.anno.test.data.sub.SubBase;
-import com.ibm.wsspi.anno.classsource.ClassSource;
+import com.ibm.ws.anno.util.internal.UtilImpl_Factory;
 import com.ibm.wsspi.anno.classsource.ClassSource_Aggregate;
 import com.ibm.wsspi.anno.classsource.ClassSource_Aggregate.ScanPolicy;
 import com.ibm.wsspi.anno.classsource.ClassSource_Exception;
@@ -61,6 +61,7 @@ import com.ibm.wsspi.anno.info.FieldInfo;
 import com.ibm.wsspi.anno.info.Info;
 import com.ibm.wsspi.anno.info.InfoStore;
 import com.ibm.wsspi.anno.info.InfoStoreException;
+import com.ibm.wsspi.anno.info.InfoStoreFactory;
 import com.ibm.wsspi.anno.info.MethodInfo;
 import com.ibm.wsspi.anno.util.Util_InternMap;
 
@@ -82,15 +83,18 @@ public class InfoStoreTest {
 
     @BeforeClass
     public static void setup() throws ClassSource_Exception, InfoStoreException {
-        AnnotationServiceImpl_Service annoService = new AnnotationServiceImpl_Service();
+        UtilImpl_Factory utilFactory = new UtilImpl_Factory();
+        ClassSourceImpl_Factory classSourceFactory = new ClassSourceImpl_Factory(utilFactory);
+        AnnotationTargetsImpl_Factory annotationTargetsFactory = new AnnotationTargetsImpl_Factory(utilFactory, classSourceFactory);
+        InfoStoreFactoryImpl infoStoreFactory = new InfoStoreFactoryImpl(utilFactory);
+        AnnotationServiceImpl_Service annoService = new AnnotationServiceImpl_Service(null, utilFactory, classSourceFactory, annotationTargetsFactory, infoStoreFactory);
 
-        ClassSourceImpl_Factory factory = annoService.getClassSourceFactory();
+        
+        ClassSource_Aggregate classSource = classSourceFactory.createAggregateClassSource("AnnoInfoTest");
+        String testClassesDir = System.getProperty("test.classesDir", "bin");
+        classSourceFactory.addDirectoryClassSource(classSource, testClassesDir, testClassesDir, ScanPolicy.SEED);
 
-        ClassSource_Aggregate classSource = factory.createAggregateClassSource("AnnoInfoTest");
-        String testClassesDir = System.getProperty("test.classesDir", "bin_test");
-        factory.addDirectoryClassSource(classSource, testClassesDir, testClassesDir, ScanPolicy.SEED);
-
-        InfoStoreFactoryImpl infoFactory = annoService.getInfoStoreFactory();
+        InfoStoreFactory infoFactory = annoService.getInfoStoreFactory();
         infoStore = infoFactory.createInfoStore(classSource);
     }
 
@@ -323,8 +327,7 @@ public class InfoStoreTest {
 
         String expectedMessage = "CWWKC0022W:";
 
-        String msgs = outputMgr.getCapturedOut();
-        StringTokenizer st = new StringTokenizer(msgs, "\n");
+        // String msgs = outputMgr.getCapturedOut();
 
         // capture any failures and dump the captured messages for diagnosis
         try {
@@ -577,7 +580,7 @@ public class InfoStoreTest {
     /**
      * Create a test ClassSource that can be used to generate errors to drive unit tests
      */
-    private class TestClassSource extends ClassSourceImpl implements ClassSource {
+    private class TestClassSource extends ClassSourceImpl {
 
         private final TraceComponent tc = Tr.register(TestClassSource.class, null, "com.ibm.ws.anno.resources.internal.AnnoMessages");
 

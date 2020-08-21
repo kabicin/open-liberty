@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2013 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -20,9 +20,9 @@ import org.objectweb.asm.Type;
 import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Trivial;
-import com.ibm.ws.anno.util.internal.UtilImpl_Factory;
-import com.ibm.ws.anno.util.internal.UtilImpl_InternMap;
 import com.ibm.wsspi.anno.info.InfoStoreException;
+import com.ibm.wsspi.anno.util.Util_Factory;
+import com.ibm.wsspi.anno.util.Util_InternMap;
 import com.ibm.wsspi.anno.util.Util_InternMap.ValueType;
 
 // FIS F005393
@@ -104,7 +104,7 @@ public class ClassInfoCache {
 
         this.infoStore = infoStore;
 
-        UtilImpl_Factory utilFactory = infoStore.getInfoStoreFactory().getUtilFactory();
+        Util_Factory utilFactory = infoStore.getInfoStoreFactory().getUtilFactory();
 
         this.descriptionInternMap = utilFactory.createInternMap(ValueType.VT_OTHER, "DescriptionMap");
 
@@ -167,17 +167,17 @@ public class ClassInfoCache {
 
     // Intern reporting ...
 
-    protected UtilImpl_InternMap descriptionInternMap;
+    protected Util_InternMap descriptionInternMap;
 
-    protected UtilImpl_InternMap packageNameInternMap;
+    protected Util_InternMap packageNameInternMap;
 
-    protected UtilImpl_InternMap classNameInternMap;
+    protected Util_InternMap classNameInternMap;
 
-    protected UtilImpl_InternMap fieldNameInternMap;
+    protected Util_InternMap fieldNameInternMap;
 
-    protected UtilImpl_InternMap methodNameInternMap;
+    protected Util_InternMap methodNameInternMap;
 
-    public UtilImpl_InternMap getDescriptionInternMap() {
+    public Util_InternMap getDescriptionInternMap() {
         return descriptionInternMap;
     }
 
@@ -185,7 +185,7 @@ public class ClassInfoCache {
         return getDescriptionInternMap().intern(description);
     }
 
-    public UtilImpl_InternMap getPackageNameInternMap() {
+    public Util_InternMap getPackageNameInternMap() {
         return packageNameInternMap;
     }
 
@@ -193,7 +193,7 @@ public class ClassInfoCache {
         return getPackageNameInternMap().intern(packageName);
     }
 
-    public UtilImpl_InternMap getClassNameInternMap() {
+    public Util_InternMap getClassNameInternMap() {
         return classNameInternMap;
     }
 
@@ -201,7 +201,7 @@ public class ClassInfoCache {
         return getClassNameInternMap().intern(className);
     }
 
-    public UtilImpl_InternMap getFieldNameInternMap() {
+    public Util_InternMap getFieldNameInternMap() {
         return fieldNameInternMap;
     }
 
@@ -209,7 +209,7 @@ public class ClassInfoCache {
         return getFieldNameInternMap().intern(fieldName);
     }
 
-    public UtilImpl_InternMap getMethodNameInternMap() {
+    public Util_InternMap getMethodNameInternMap() {
         return methodNameInternMap;
     }
 
@@ -238,7 +238,7 @@ public class ClassInfoCache {
     protected static final boolean DO_NOT_FORCE_PACKAGE = false;
 
     protected PackageInfoImpl getPackageInfo(String packageName, boolean doForce) {
-        String methodName = "getPackageInfo";
+        // String methodName = "getPackageInfo";
 
         PackageInfoImpl packageInfo = packageInfos.get(packageName);
 
@@ -463,7 +463,7 @@ public class ClassInfoCache {
     protected HashMap<String, PrimitiveClassInfo> primitiveClassInfos;
 
     public PrimitiveClassInfo getPrimitiveClassInfo(String typeClassName, Type primitiveType) {
-        String methodName = "getPrimitiveClassInfo";
+        // String methodName = "getPrimitiveClassInfo";
 
         PrimitiveClassInfo primitiveClassInfo = primitiveClassInfos.get(typeClassName);
         String primitiveClassInfoCase;
@@ -658,7 +658,7 @@ public class ClassInfoCache {
     }
 
     protected DelayedClassInfo basicPutDelayedClassInfo(String name) {
-        String methodName = "basicPutDelayedClassInfo";
+        // String methodName = "basicPutDelayedClassInfo";
 
         DelayedClassInfo delayedClassInfo = new DelayedClassInfo(name, getInfoStore());
 
@@ -701,7 +701,7 @@ public class ClassInfoCache {
     }
 
     protected ClassInfoImpl associate(NonDelayedClassInfo nonDelayedClassInfo) {
-        String methodName = "associate(NonDelayedClassInfo)";
+        // String methodName = "associate(NonDelayedClassInfo)";
 
         DelayedClassInfo delayedClassInfo = basicGetDelayedClassInfo(nonDelayedClassInfo.getName());
 
@@ -840,7 +840,7 @@ public class ClassInfoCache {
     }
 
     protected boolean basicPutAnnotatedClassInfo(NonDelayedClassInfo classInfo) {
-        String methodName = "basicPutAnnotatedClassInfo";
+        // String methodName = "basicPutAnnotatedClassInfo";
 
         // Use the interned class name.
         String classInfoName = classInfo.getName();
@@ -890,7 +890,7 @@ public class ClassInfoCache {
     }
 
     protected boolean basicPutClassInfo(NonDelayedClassInfo classInfo) {
-        String methodName = "basicPutClassInfo";
+        // String methodName = "basicPutClassInfo";
 
         // Use the interned class name.
         String classInfoName = classInfo.getName();

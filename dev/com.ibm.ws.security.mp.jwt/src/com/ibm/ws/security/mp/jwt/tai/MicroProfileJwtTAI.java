@@ -55,7 +55,7 @@ import com.ibm.wsspi.kernel.service.utils.ConcurrentServiceReferenceMap;
 import com.ibm.wsspi.security.tai.TAIResult;
 import com.ibm.wsspi.security.tai.TrustAssociationInterceptor;
 
-@Component(service = { TrustAssociationInterceptor.class }, immediate = true, configurationPolicy = ConfigurationPolicy.IGNORE, name = "microProfileJwtTAI", property = { "service.vendor=IBM", "type=microProfileJwtTAI", "id=MPJwtTAI", "TAIName=MPJwtTAI", "invokeBeforeSSO:Boolean=true", "addLTPACookieToResponse:Boolean=false" })
+@Component(service = { TrustAssociationInterceptor.class }, immediate = true, configurationPolicy = ConfigurationPolicy.IGNORE, name = "microProfileJwtTAI", property = { "service.vendor=IBM", "type=microProfileJwtTAI", "id=MPJwtTAI", "TAIName=MPJwtTAI", "invokeBeforeSSO:Boolean=true", "disableLtpaCookie:Boolean=true" })
 public class MicroProfileJwtTAI implements TrustAssociationInterceptor {
 
     private static TraceComponent tc = Tr.register(MicroProfileJwtTAI.class, TraceConstants.TRACE_GROUP, TraceConstants.MESSAGE_BUNDLE);
@@ -71,6 +71,7 @@ public class MicroProfileJwtTAI implements TrustAssociationInterceptor {
     public static final String KEY_MP_JWT_CONFIG = "microProfileJwtConfig";
     public static final String ATTRIBUTE_TAI_REQUEST = "MPJwtTaiRequest";
     public static final String JTI_CLAIM = "jti";
+    public static final String KEY_AUTHORIZATION_HEADER_SCHEME = "authorizationHeaderScheme";
     public static final String KEY_MP_JWT_EXTENSION_SERVICE = "mpJwtExtensionService";
     static final AtomicServiceReference<SecurityService> securityServiceRef = new AtomicServiceReference<SecurityService>(KEY_SECURITY_SERVICE);
     static protected final ConcurrentServiceReferenceMap<String, AuthenticationFilter> authFilterServiceRef = new ConcurrentServiceReferenceMap<String, AuthenticationFilter>(KEY_FILTER);
@@ -281,7 +282,7 @@ public class MicroProfileJwtTAI implements TrustAssociationInterceptor {
         } catch (MpJwtProcessingException e) {
             // did not find unique mpJwt config to serve this request
             if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "A unique mpJwt config wasn't found for this request. Exception was " + e.getMessage());
+                Tr.debug(tc, "A unique mpJwt config wasn't found for this request. Exception was " + e);
             }
             TAIResult result = sendToErrorPage(response, defaultTaiResult);
             if (tc.isDebugEnabled()) {
@@ -430,7 +431,7 @@ public class MicroProfileJwtTAI implements TrustAssociationInterceptor {
         }
         TAIMappingHelper mappingHelper = new TAIMappingHelper(decodedPayload, clientConfig);
         mappingHelper.createJwtPrincipalAndPopulateCustomProperties(jwtToken, addJwtPrincipal);
-
+        mappingHelper.addDisableSsoLtpaCacheProp();
         Subject subject = mappingHelper.createSubjectFromCustomProperties(addJwtPrincipal);
         TAIResult result = TAIResult.create(HttpServletResponse.SC_OK, mappingHelper.getUsername(), subject);
         if (tc.isDebugEnabled()) {

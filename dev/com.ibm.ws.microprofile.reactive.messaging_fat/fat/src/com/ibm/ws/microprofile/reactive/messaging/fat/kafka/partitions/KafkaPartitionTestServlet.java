@@ -36,9 +36,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.junit.Test;
 
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.common.KafkaTestConstants;
 import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.AbstractKafkaTestServlet;
-import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.SimpleKafkaReader;
-import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.SimpleKafkaWriter;
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.KafkaReader;
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.KafkaWriter;
 
 @WebServlet("/KafkaPartitionTest")
 public class KafkaPartitionTestServlet extends AbstractKafkaTestServlet {
@@ -46,7 +47,6 @@ public class KafkaPartitionTestServlet extends AbstractKafkaTestServlet {
     private static final long serialVersionUID = 1L;
 
     public static final String APP_GROUPID = "kafka-partition-test-group";
-    public static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Inject
     @ConfigProperty(name = KAFKA_BOOTSTRAP_PROPERTY)
@@ -80,7 +80,7 @@ public class KafkaPartitionTestServlet extends AbstractKafkaTestServlet {
         consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, APP_GROUPID);
         consumerConfig.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
         consumerConfig.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        SimpleKafkaReader<String> reader = kafkaTestClient.readerFor(consumerConfig, CHANNEL_NAME);
+        KafkaReader<String, String> reader = kafkaTestClient.readerFor(consumerConfig, CHANNEL_NAME);
 
         List<PartitionInfo> allPartitions = reader.getConsumer().partitionsFor(CHANNEL_NAME);
 
@@ -88,7 +88,7 @@ public class KafkaPartitionTestServlet extends AbstractKafkaTestServlet {
         Duration elapsed = Duration.ZERO;
         long startTime = System.nanoTime();
         Set<TopicPartition> assignedPartitions = Collections.emptySet();
-        while (elapsed.compareTo(TIMEOUT) < 0 && assignedPartitions.size() != 1) {
+        while (elapsed.compareTo(KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT) < 0 && assignedPartitions.size() != 1) {
             reader.getConsumer().poll(Duration.ZERO); // Kafka doesn't process partition assignment unless we poll
             assignedPartitions = reader.getConsumer().assignment();
             Thread.sleep(100);
@@ -111,29 +111,30 @@ public class KafkaPartitionTestServlet extends AbstractKafkaTestServlet {
         long receptionBeanPartitionOffset = kafkaTestClient.getTopicOffset(CHANNEL_NAME, receptionBeanPartitionId, APP_GROUPID);
 
         // Send a message to the partition assigned to the test reader and check the new reader receives it and advances the partition offset
-        SimpleKafkaWriter<String> writer = kafkaTestClient.writerFor(CHANNEL_NAME);
-        writer.sendMessage("test1", testReaderPartitionId, TIMEOUT);
-        List<String> testMessagesRead = reader.waitForMessages(1, TIMEOUT);
+        KafkaWriter<String, String> writer = kafkaTestClient.writerFor(CHANNEL_NAME);
+        writer.sendMessage("test1", testReaderPartitionId, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
+        List<String> testMessagesRead = reader.assertReadMessages(1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
         assertThat(testMessagesRead, contains("test1"));
 
         // Send a message to the partition not assigned to the test reader and check that the bean receives it and advances the partition offset
-        writer.sendMessage("test2", receptionBeanPartitionId, TIMEOUT);
-        List<Message<String>> beanMessagesRead = receptionBean.getReceivedMessages(1, TIMEOUT);
+        writer.sendMessage("test2", receptionBeanPartitionId, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
+        List<Message<String>> beanMessagesRead = receptionBean.assertReceivedMessages(1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
         List<String> beanMessagePayloads = beanMessagesRead.stream().map(Message::getPayload).collect(Collectors.toList());
         beanMessagesRead.forEach(Message::ack);
         assertThat(beanMessagePayloads, contains("test2"));
-        kafkaTestClient.assertTopicOffsetAdvancesTo(receptionBeanPartitionOffset + 1, TIMEOUT, CHANNEL_NAME, receptionBeanPartitionId, APP_GROUPID);
+        kafkaTestClient.assertTopicOffsetAdvancesTo(receptionBeanPartitionOffset + 1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT, CHANNEL_NAME, receptionBeanPartitionId,
+                                                    APP_GROUPID);
 
         // Close the test reader
         reader.close();
 
         // With AUTO_COMMIT_CONFIG, we don't have control over when Kafka commits the partition offset for us
         // but it should happen once we've closed the reader
-        kafkaTestClient.assertTopicOffsetAdvancesTo(testReaderPartitionOffset + 1, TIMEOUT, CHANNEL_NAME, testReaderPartitionId, APP_GROUPID);
+        kafkaTestClient.assertTopicOffsetAdvancesTo(testReaderPartitionOffset + 1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT, CHANNEL_NAME, testReaderPartitionId, APP_GROUPID);
 
         // Send a message to each partition and check that the bean receives both of them and advances the offset of both partitions
-        writer.sendMessage("test3", testReaderPartitionId, TIMEOUT);
-        writer.sendMessage("test4", receptionBeanPartitionId, TIMEOUT);
+        writer.sendMessage("test3", testReaderPartitionId, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
+        writer.sendMessage("test4", receptionBeanPartitionId, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
 
         // If the reception of these messages interacts with kafka partition reassignment, we may get duplicate messages which makes this check more complex :(
         elapsed = Duration.ZERO;
@@ -143,7 +144,7 @@ public class KafkaPartitionTestServlet extends AbstractKafkaTestServlet {
         long receptionBeanFinalOffset = 0;
         Set<String> messagePayloads = new HashSet<>();
         // Loop, polling and checking offsets, until we see the topic offsets advance
-        while (elapsed.compareTo(TIMEOUT) < 0 && !done) {
+        while (elapsed.compareTo(KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT) < 0 && !done) {
             List<Message<String>> newMessages = receptionBean.getReceivedMessages();
             for (Message<String> m : newMessages) {
                 messagePayloads.add(m.getPayload());

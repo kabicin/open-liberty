@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2013, 2019 IBM Corporation and others.
+ * Copyright (c) 2013, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -197,6 +197,8 @@ public interface ConfigurationProvider {
 
     public boolean isRecoverOnStartup();
 
+    public boolean isOnePCOptimization();
+
     /**
      * This method is provided for Liberty integration. The Liberty
      * com.ibm.ws.transaction bundle retrieves the resource factory
@@ -215,6 +217,12 @@ public interface ConfigurationProvider {
     public String getRecoveryIdentity();
 
     public String getRecoveryGroup();
+
+    public String getLeaseCheckStrategy();
+
+    public int getLeaseCheckInterval();
+
+    public int getLeaseLength();
 
     /**
      * Sets the applId of the server.
@@ -269,10 +277,30 @@ public interface ConfigurationProvider {
     public int getPeerTimeBeforeStale();
 
     /**
-     * Configures the length of time before a local Tran recovery log is deemed to be stale when the peer locking scheme is enabled for Tran recovery logs that are stored in a
-     * database.
+     * Configures the length of time between retries for HADB transient errors for standard operations where the Tran recovery logs are stored in a database.
      *
      * @return
      */
-    public int getLocalTimeBeforeStale();
+    public int getStandardTransientErrorRetryTime();
+
+    /**
+     * Configures the number of retries for HADB transient errors for standard operations where the Tran recovery logs are stored in a database.
+     *
+     * @return
+     */
+    public int getStandardTransientErrorRetryAttempts();
+
+    /**
+     * Configures the length of time between retries for HADB transient errors for lightweight operations where the Tran recovery logs are stored in a database.
+     *
+     * @return
+     */
+    public int getLightweightTransientErrorRetryTime();
+
+    /**
+     * Configures the number of retries for HADB transient errors for lightweight operations where the Tran recovery logs are stored in a database.
+     *
+     * @return
+     */
+    public int getLightweightTransientErrorRetryAttempts();
 }

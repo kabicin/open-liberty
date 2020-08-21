@@ -16,9 +16,9 @@ import java.util.Map.Entry;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.testcontainers.containers.KafkaContainer;
+
+import com.ibm.websphere.simplicity.PropertiesAsset;
 
 /**
  * Shrinkwrap asset for an MP reactive connector config
@@ -48,8 +48,6 @@ import org.testcontainers.containers.KafkaContainer;
 public class ConnectorProperties extends PropertiesAsset {
 
     public static final String DEFAULT_CONNECTOR_ID = "liberty-kafka";
-    public static final String DEFAULT_SERIALIZER = StringSerializer.class.getName();
-    public static final String DEFAULT_DESERIALIZER = StringDeserializer.class.getName();
 
     /**
      * Creates a simple configuration for a channel sending to a topic of the same name
@@ -62,6 +60,20 @@ public class ConnectorProperties extends PropertiesAsset {
      */
     public static ConnectorProperties simpleOutgoingChannel(KafkaContainer kafka, String channelName) {
         return simpleOutgoingChannel(kafka.getBootstrapServers(), channelName);
+    }
+
+    /**
+     * Creates a simple configuration for a channel sending to a topic of the given name
+     * <p>
+     * The message type is String
+     *
+     * @param kafka       the kafka container
+     * @param channelName the channel and topic name
+     * @param topic       the topic name
+     * @return the ConnectorProperties to add to the app configuration
+     */
+    public static ConnectorProperties simpleOutgoingChannel(KafkaContainer kafka, String channelName, String topic) {
+        return simpleOutgoingChannel(kafka, DEFAULT_CONNECTOR_ID, channelName, topic);
     }
 
     /**
@@ -104,9 +116,7 @@ public class ConnectorProperties extends PropertiesAsset {
     public static ConnectorProperties simpleOutgoingChannel(Map<? extends String, ?> connectionProperties, String channelName) {
         return new ConnectorProperties(Direction.OUTGOING, channelName)
                         .addAll(connectionProperties)
-                        .addProperty("connector", DEFAULT_CONNECTOR_ID)
-                        .addProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, DEFAULT_SERIALIZER)
-                        .addProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, DEFAULT_SERIALIZER);
+                        .addProperty("connector", DEFAULT_CONNECTOR_ID);
     }
 
     /**
@@ -167,8 +177,6 @@ public class ConnectorProperties extends PropertiesAsset {
     public static ConnectorProperties simpleIncomingChannel(Map<? extends String, ?> connectionProperties, String channelName, String groupId) {
         return new ConnectorProperties(Direction.INCOMING, channelName)
                         .addAll(connectionProperties)
-                        .addProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, DEFAULT_DESERIALIZER)
-                        .addProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, DEFAULT_DESERIALIZER)
                         .addProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId)
                         .addProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
                         .addProperty("connector", DEFAULT_CONNECTOR_ID);

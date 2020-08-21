@@ -23,9 +23,10 @@ import com.ibm.ws.fat.util.browser.WebResponse;
 /**
  * <p>A test that stores messages logged during execution to special directories and files.</p>
  * <p>Instances of this class should not be run in parallel. If they are, weird things will happen with log files.</p>
- * 
+ *
  * @author Tim Burns
  */
+@Deprecated
 public abstract class LoggingTest {
 
     /** Prints extra messages to the log to distinguish test A from test B. JUnit requires this variable to be public. */
@@ -44,7 +45,7 @@ public abstract class LoggingTest {
      * <p>Retrieves the unique directory where log information will be stored for this test fixture.</p>
      * <p>Use this method when you need to store debug information that's applicable to multiple tests. If you need to store debug information that's only applicable to the current
      * test, use {@link #getTestCaseLogDirectory()} instead.</p>
-     * 
+     *
      * @return the unique directory where log information will be stored for this test fixture
      */
     protected File getTestFixtureLogDirectory() {
@@ -55,7 +56,7 @@ public abstract class LoggingTest {
      * <p>Retrieves the unique directory where log information will be stored for this test case.</p>
      * <p>Use this method when you need to store debug information that's only applicable to the current test. If you need to store debug information that's applicable to multiple
      * tests, use {@link #getTestFixtureLogDirectory()} instead.</p>
-     * 
+     *
      * @return the unique directory where log information will be stored for this test case
      */
     protected File getTestCaseLogDirectory() {
@@ -67,7 +68,7 @@ public abstract class LoggingTest {
      * <p>The first request from this instance will establish a new HttpSession, and response information will be stored in the test case log directory.</p>
      * <p>Use this method when you only need to access the same {@link WebBrowser} within a single test case. If you need to reuse the same {@link WebBrowser} with multiple tests,
      * use {@link #createWebBrowserForTestFixture()} instead.</p>
-     * 
+     *
      * @return a new {@link WebBrowser} instance for this test case
      */
     protected WebBrowser createWebBrowserForTestCase() {
@@ -79,7 +80,7 @@ public abstract class LoggingTest {
      * <p>The first request from this instance will establish a new HttpSession, and response information will be stored in the test fixture log directory.</p>
      * <p>Use this method when you need to reuse the same {@link WebBrowser} with multiple tests. If you only need to access the same {@link WebBrowser} within a single test
      * case, use {@link #createWebBrowserForTestCase()} instead.</p>
-     * 
+     *
      * @return a new WebBrowser instance for this test case
      */
     protected WebBrowser createWebBrowserForTestFixture() {
@@ -87,6 +88,14 @@ public abstract class LoggingTest {
     }
 
     abstract protected SharedServer getSharedServer();
+
+    protected final void verifyBadUrl(String resource) throws Exception {
+        verifyBadUrl(createWebBrowserForTestCase(), resource);
+    }
+
+    protected final void verifyBadUrl(WebBrowser wb, String resource) throws Exception {
+        getSharedServer().verifyBadUrl(wb, resource);
+    }
 
     protected final WebResponse verifyResponse(String resource, String expectedResponse) throws Exception {
         return verifyResponse(createWebBrowserForTestCase(), resource, expectedResponse);

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2018, 2019 IBM Corporation and others.
+ * Copyright (c) 2018, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -33,16 +33,19 @@ public class SAFAuthorizationEvent extends AuditEvent {
     }
 
     public SAFAuthorizationEvent(int safReturnCode,
-                                        int racfReturnCode,
-                                        int racfReasonCode,
-                                        String userSecurityName,
-                                        String applID,
-                                        String safProfile,
-                                        String safClass,
-                                        Boolean authDecision,
-                                        String principalName,
-                                        String accessLevel,
-                                        String errorMessage) {
+                                 int racfReturnCode,
+                                 int racfReasonCode,
+                                 String userSecurityName,
+                                 String applID,
+                                 String safProfile,
+                                 String safClass,
+                                 Boolean authDecision,
+                                 String principalName,
+                                 String accessLevel,
+                                 String errorMessage,
+                                 String methodName,
+                                 String volser,
+                                 String vsam) {
         this();
 
         // This is put in by default from AuditEvent, not needed so removing
@@ -85,6 +88,18 @@ public class SAFAuthorizationEvent extends AuditEvent {
         }
         if (errorMessage != null) {
             set(AuditEvent.TARGET_SAF_ERROR_MESSAGE, errorMessage);
+        }
+        // Used to specify the method name where the audit record was cut
+        // Ex: if cut in SAFPasswordChangeUtility.changePassword, methodName would be 'changePassword'
+        if (methodName != null) {
+            set(AuditEvent.TARGET_METHOD, methodName);
+        }
+        // Fields for checking SAF isAuthorizedToDataset
+        if (volser != null) {
+            set(AuditEvent.TARGET_VOLSER, volser);
+        }
+        if (vsam != null) {
+            set(AuditEvent.TARGET_VSAM, vsam);
         }
     }
 }

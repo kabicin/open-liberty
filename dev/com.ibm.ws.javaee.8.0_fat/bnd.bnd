@@ -15,10 +15,11 @@ src: \
 	fat/src,\
 	test-applications/javaee8App/src
 
-javac.source: 1.8
-javac.target: 1.8
 
 fat.project: true
+
+tested.features:\
+    jakartaee-8.0
 
 -buildpath: \
 	com.ibm.websphere.javaee.annotation.1.2;version=latest,\

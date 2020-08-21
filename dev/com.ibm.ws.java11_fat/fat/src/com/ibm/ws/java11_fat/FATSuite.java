@@ -18,6 +18,8 @@ import org.junit.runners.Suite.SuiteClasses;
 @SuiteClasses({
                 Java11Test.class,
                 Java12Test.class,
+                Java13Test.class,
+                Java14Test.class,
                 Java11CNFETest.class,
                 JavaInfoTest.class,
                 MultiReleaseJarTest.class

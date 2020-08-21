@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2018 IBM Corporation and others.
+ * Copyright (c) 2016, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -38,9 +38,9 @@ import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.conn.ssl.AllowAllHostnameVerifier;
+import org.apache.http.conn.ssl.DefaultHostnameVerifier;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.StrictHostnameVerifier;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
@@ -149,7 +149,7 @@ public class JwKRetriever {
         boolean isHttp = remoteHttpCall(this.jwkEndpointUrl, this.publicKeyText, this.keyLocation);
         try {
             if (isHttp) {
-                key = this.getJwkRemote(kid, x5t, use , useSystemPropertiesForHttpClientConnections);
+                key = this.getJwkRemote(kid, x5t, use, useSystemPropertiesForHttpClientConnections);
             } else {
                 key = this.getJwkLocal(kid, x5t, publicKeyText, keyLocation, use);
             }
@@ -170,22 +170,20 @@ public class JwKRetriever {
         return key;
     }
 
-    protected PublicKey getJwkCache(String kid, String x5t) {
+    private PublicKey getJwkFromJWKSet(String setId, String kid, String x5t, String use, String keyText) {
+        PublicKey key = null;
         if (kid != null) {
-            return jwkSet.getPublicKeyByKid(kid);
+            key = jwkSet.getPublicKeyBySetIdAndKid(setId, kid);
         } else if (x5t != null) {
-            return jwkSet.getPublicKeyByx5t(x5t);
-        }
-        return jwkSet.getPublicKeyByKid(null);
-    }
-
-    private PublicKey getJwkFromJWKSet(String setId, String kid, String x5t, String use) {
-        if (kid != null) {
-            return jwkSet.getPublicKeyBySetIdAndKid(setId, kid);
-        } else if (x5t != null) {
-            return jwkSet.getPublicKeyBySetIdAndx5t(setId, x5t);
+            key = jwkSet.getPublicKeyBySetIdAndx5t(setId, x5t);
         } else if (use != null) {
-            return jwkSet.getPublicKeyBySetIdAndUse(setId, use);
+            key = jwkSet.getPublicKeyBySetIdAndUse(setId, use);
+        }
+        if (key != null) {
+            return key;
+        }
+        if (keyText != null) {
+            return jwkSet.getPublicKeyBySetIdAndKeyText(setId, keyText);
         }
         return jwkSet.getPublicKeyBySetId(setId);
     }
@@ -201,62 +199,63 @@ public class JwKRetriever {
         }
         return isHttp;
     }
-    @FFDCIgnore({  Exception.class })
+
+    @FFDCIgnore({ Exception.class })
     protected PublicKey getPublicKeyFromFile(String location, String kid, String x5t, String use) {
         PublicKey publicKey = null;
         String keyString = null;
         String classLoadingCacheSelector = null;
         String fileSystemCacheSelector = null;
-        
+
         File jwkFile = null;
         try {
             // figure out which cache to use for jwk from classloading
             classLoadingCacheSelector = Thread.currentThread().getContextClassLoader().toString() + location;
-            //figure out which cache to use for jwk from file system            
-            final String keyFile;                
+            //figure out which cache to use for jwk from file system
+            final String keyFile;
             if (location.startsWith("file:")) {
                 URI uri = new URI(location);
                 keyFile = uri.getPath();
             } else {
                 keyFile = location;
-            }                
+            }
             jwkFile = new File(keyFile);
-            fileSystemCacheSelector = jwkFile.getCanonicalPath();              
-                  
-            synchronized (jwkSet) {                
-                publicKey = getJwkFromJWKSet(fileSystemCacheSelector, kid, x5t, use);  // try the cache.
-                if (publicKey == null) {                    
-                    publicKey = getJwkFromJWKSet(classLoadingCacheSelector, kid, x5t, use);  
+            fileSystemCacheSelector = jwkFile.getCanonicalPath();
+
+            synchronized (jwkSet) {
+                publicKey = getJwkFromJWKSet(fileSystemCacheSelector, kid, x5t, use, null); // try the cache.
+                if (publicKey == null) {
+                    publicKey = getJwkFromJWKSet(classLoadingCacheSelector, kid, x5t, use, null);
                 }
-                if (publicKey == null) {  // cache miss, read the jwk if we can,  &  update locationUsed
-                    InputStream is = getInputStream(jwkFile, fileSystemCacheSelector,  location, classLoadingCacheSelector);  
-                    if(is != null) {
+                if (publicKey == null) { // cache miss, read the jwk if we can,  &  update locationUsed
+                    InputStream is = getInputStream(jwkFile, fileSystemCacheSelector, location, classLoadingCacheSelector);
+                    if (is != null) {
                         keyString = getKeyAsString(is);
                         parseJwk(keyString, null, jwkSet, sigAlg); // also adds entry to cache.
-                        publicKey = getJwkFromJWKSet(locationUsed, kid, x5t, use);
+                        publicKey = getJwkFromJWKSet(locationUsed, kid, x5t, use, keyString);
                     }
                 }
             }
-            
+
         } catch (Exception e2) {
             if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "Caught exception opening file from location [" + location + "]: " + e2.getMessage());
+                Tr.debug(tc, "Caught exception opening file from location [" + location + "]: " + e2);
             }
         }
         return publicKey;
     }
-    
+
     /**
      * open an input stream to either a file on the file system or a url on the classpath.
      * Update the locationUsed class variable to note where we got the stream from so results of reading it can be cached properly
      *
      */
     @FFDCIgnore({ PrivilegedActionException.class })
-    protected InputStream getInputStream(final File f, String fileSystemSelector,  String location, String classLoadingSelector ) throws IOException {      
+    protected InputStream getInputStream(final File f, String fileSystemSelector, String location, String classLoadingSelector) throws IOException {
         // check file system first like we used to do
         if (f != null) {
             InputStream is = null;
-            try { 
+            try {
                 is = (FileInputStream) AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
                     @Override
                     public Object run() throws Exception {
@@ -267,25 +266,25 @@ public class JwKRetriever {
                         }
                     }
                 });
-                
+
             } catch (PrivilegedActionException e1) {
             }
-            if (is != null) { 
+            if (is != null) {
                 locationUsed = fileSystemSelector;
                 if (tc.isDebugEnabled()) {
-                    Tr.debug(tc, "input stream obtained from file system and locationUsed set to: "+ locationUsed);
+                    Tr.debug(tc, "input stream obtained from file system and locationUsed set to: " + locationUsed);
                 }
                 return is;
             }
-        }        
+        }
         // do the expensive classpath search
         // performant: we're avoiding calling getResource if entry was previously cached.
-        URL u = Thread.currentThread().getContextClassLoader().getResource(location);  
+        URL u = Thread.currentThread().getContextClassLoader().getResource(location);
         locationUsed = classLoadingSelector;
         if (tc.isDebugEnabled()) {
-            Tr.debug(tc, "input stream obtained from classloader and  locationUsed set to: "+ locationUsed);
+            Tr.debug(tc, "input stream obtained from classloader and  locationUsed set to: " + locationUsed);
         }
-        if (u != null) {            
+        if (u != null) {
             return u.openStream();
         }
         return null;
@@ -298,10 +297,10 @@ public class JwKRetriever {
 
         if (publicKeyText != null) {
             synchronized (jwkSet) {
-                PublicKey publicKey = getJwkFromJWKSet(publicKeyText, kid, x5t, use);
+                PublicKey publicKey = getJwkFromJWKSet(publicKeyText, kid, x5t, use, publicKeyText);
                 if (publicKey == null) {
                     parseJwk(publicKeyText, null, jwkSet, sigAlg);
-                    publicKey = getJwkFromJWKSet(publicKeyText, kid, x5t, use);
+                    publicKey = getJwkFromJWKSet(publicKeyText, kid, x5t, use, publicKeyText);
                 }
                 return publicKey;
             }
@@ -345,7 +344,7 @@ public class JwKRetriever {
         PublicKey key = null;
         try {
             synchronized (jwkSet) {
-                key = getJwkFromJWKSet(locationUsed, kid, x5t, use);
+                key = getJwkFromJWKSet(locationUsed, kid, x5t, use, null);
                 if (key == null) {
                     key = doJwkRemote(kid, x5t, use, useSystemPropertiesForHttpClientConnections);
                 }
@@ -367,7 +366,10 @@ public class JwKRetriever {
 
         try {
             // TODO - validate url
-            SSLSocketFactory sslSocketFactory = getSSLSocketFactory(locationUsed, sslConfigurationName, sslSupport);            
+            SSLSocketFactory sslSocketFactory = null;
+            if (locationUsed != null && locationUsed.toLowerCase().startsWith("https")) {
+                sslSocketFactory = getSSLSocketFactory(locationUsed, sslConfigurationName, sslSupport);
+            }
             HttpClient client = createHTTPClient(sslSocketFactory, locationUsed, hostNameVerificationEnabled, useSystemPropertiesForHttpClientConnections);
             jsonString = getHTTPRequestAsString(client, locationUsed);
             boolean bJwk = parseJwk(jsonString, null, jwkSet, sigAlg);
@@ -394,7 +396,7 @@ public class JwKRetriever {
             }
         }
 
-        return getJwkFromJWKSet(locationUsed, kid, x5t, use);
+        return getJwkFromJWKSet(locationUsed, kid, x5t, use, jsonString);
     }
 
     // separate to be an independent method for unit tests
@@ -432,6 +434,9 @@ public class JwKRetriever {
         }
 
         for (JWK aJwk : jwks) {
+            if (isPEM(keyText)) {
+                jwkSet.addPemKey(location, keyText, jwk);
+            }
             if (location != null) {
                 jwkSet.add(location, aJwk);
             } else {
@@ -507,14 +512,14 @@ public class JwKRetriever {
     JSONObject parseJsonObject(String jsonString) {
         JSONObject jsonObject = null;
         try {
-            if (!jsonString.startsWith(JSON_START)) { //convert Base64 encoded String to JSON string               
+            if (!jsonString.startsWith(JSON_START)) { //convert Base64 encoded String to JSON string
                 // jsonString=new String (Base64.getDecoder().decode(jsonString), "UTF-8");
                 jsonString = new String(Base64.decodeBase64(jsonString), "UTF-8");
             }
             jsonObject = JSONObject.parse(jsonString);
         } catch (Exception e) {
             if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "Caught exception parsing JSON string [" + jsonString + "]: " + e.getMessage());
+                Tr.debug(tc, "Caught exception parsing JSON string [" + jsonString + "]: " + e);
             }
         }
         return jsonObject;
@@ -527,7 +532,7 @@ public class JwKRetriever {
             jsonObject = JSONObject.parse(is);
         } catch (Exception e) {
             if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "Caught exception parsing input stream [" + is.toString() + "]: " + e.getMessage());
+                Tr.debug(tc, "Caught exception parsing input stream [" + is.toString() + "]: " + e);
             }
         }
         return jsonObject;
@@ -540,40 +545,10 @@ public class JwKRetriever {
             jsonArray = JSONArray.parse(jsonString);
         } catch (Exception e) {
             if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "Caught exception parsing JSON string [" + jsonString + "]: " + e.getMessage());
+                Tr.debug(tc, "Caught exception parsing JSON string [" + jsonString + "]: " + e);
             }
         }
         return jsonArray;
-    }
-
-    boolean jsonObjectContainsKtyForValidJwk(JSONObject entry, JWKSet jwkset, String signatureAlgorithm) {
-        if (entry == null) {
-            return false;
-        }
-
-        JWK jwk = null;
-        String kty = (String) entry.get("kty");
-        if (kty == null) {
-            if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "JSON object is missing 'kty' entry");
-            }
-            return false;
-        }
-
-        jwk = createJwkBasedOnKty(kty, entry, signatureAlgorithm);
-        if (jwk == null) {
-            return false;
-        }
-
-        if (tc.isDebugEnabled()) {
-            Tr.debug(tc, "Parsing JWK and adding it to JWK set");
-        }
-        jwk.parse();
-        jwkset.addJWK(jwk);
-        if (tc.isDebugEnabled()) {
-            Tr.debug(tc, "add remote key for keyid: ", jwk.getKeyID());
-        }
-        return true;
     }
 
     JWK createJwkBasedOnKty(String kty, JSONObject keyEntry, String signatureAlgorithm) {
@@ -619,7 +594,7 @@ public class JwKRetriever {
         try {
             sslSocketFactory = sslSupport.getSSLSocketFactory(sslConfigurationName);
         } catch (javax.net.ssl.SSLException e) {
-            throw new SSLException(e.getMessage());
+            throw new SSLException(e);
         }
         if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
             Tr.debug(tc, "sslSocketFactory (" + ") get: " + sslSocketFactory);
@@ -703,20 +678,19 @@ public class JwKRetriever {
         return client;
 
     }
-    
-    protected HttpClientBuilder getBuilder(boolean useSystemPropertiesForHttpClientConnections)
-    {        
+
+    protected HttpClientBuilder getBuilder(boolean useSystemPropertiesForHttpClientConnections) {
         return useSystemPropertiesForHttpClientConnections ? HttpClientBuilder.create().useSystemProperties() : HttpClientBuilder.create();
     }
 
-    private HttpClient createHttpClient(boolean isSecure, boolean isHostnameVerification, SSLSocketFactory sslSocketFactory, boolean addBasicAuthHeader, BasicCredentialsProvider credentialsProvider, boolean useSystemPropertiesForHttpClientConnections) {       
+    private HttpClient createHttpClient(boolean isSecure, boolean isHostnameVerification, SSLSocketFactory sslSocketFactory, boolean addBasicAuthHeader, BasicCredentialsProvider credentialsProvider, boolean useSystemPropertiesForHttpClientConnections) {
         HttpClient client = null;
         if (isSecure) {
             SSLConnectionSocketFactory connectionFactory = null;
             if (!isHostnameVerification) {
-                connectionFactory = new SSLConnectionSocketFactory(sslSocketFactory, new AllowAllHostnameVerifier());
+                connectionFactory = new SSLConnectionSocketFactory(sslSocketFactory, new NoopHostnameVerifier());
             } else {
-                connectionFactory = new SSLConnectionSocketFactory(sslSocketFactory, new StrictHostnameVerifier());
+                connectionFactory = new SSLConnectionSocketFactory(sslSocketFactory, new DefaultHostnameVerifier());
             }
             if (addBasicAuthHeader) {
                 client = getBuilder(useSystemPropertiesForHttpClientConnections).setDefaultCredentialsProvider(credentialsProvider).setSSLSocketFactory(connectionFactory).build();

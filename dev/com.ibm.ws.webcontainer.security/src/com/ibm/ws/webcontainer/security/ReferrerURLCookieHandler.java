@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2019 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -25,6 +25,7 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Sensitive;
 import com.ibm.ws.webcontainer.security.internal.URLHandler;
+import com.ibm.wsspi.webcontainer.WebContainerRequestState;
 
 /**
  * Contains all WASReqURL Cookie related functions required by WAS.security.
@@ -90,7 +91,7 @@ public class ReferrerURLCookieHandler extends URLHandler {
      */
     public Cookie createCookie(String cookieName, @Sensitive String value, boolean enableHttpOnly, HttpServletRequest req) {
         Cookie c = new Cookie(cookieName, value);
-        if (cookieName.equals("WASReqURL")) {
+        if (cookieName.equals(REFERRER_URL_COOKIENAME) || cookieName.startsWith("WASOidcStateKey")) {
             c.setPath(getPathName(req));
         } else {
             c.setPath("/");
@@ -102,6 +103,17 @@ public class ReferrerURLCookieHandler extends URLHandler {
         if (webAppSecConfig.getSSORequiresSSL()) {
             c.setSecure(true);
         }
+
+        String sameSite = webAppSecConfig.getSameSiteCookie();
+        if (sameSite != null && !sameSite.equals("Disabled")) {
+            WebContainerRequestState requestState = WebContainerRequestState.getInstance(true);
+            requestState.setCookieAttributes(cookieName, "SameSite=" + sameSite);
+
+            if (sameSite.equals("None")) {
+                c.setSecure(true);
+            }
+        }
+
         return c;
     }
 
@@ -129,7 +141,7 @@ public class ReferrerURLCookieHandler extends URLHandler {
      */
     public void invalidateCookie(HttpServletRequest req, HttpServletResponse res, String cookieName, boolean enableHttpOnly) {
         Cookie c = new Cookie(cookieName, "");
-        if (cookieName.equals("WASReqURL")) {
+        if (cookieName.equals(REFERRER_URL_COOKIENAME)) {
             c.setPath(getPathName(req));
         } else {
             c.setPath("/");

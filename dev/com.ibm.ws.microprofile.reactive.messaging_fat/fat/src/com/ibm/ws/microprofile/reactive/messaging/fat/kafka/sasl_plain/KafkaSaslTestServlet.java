@@ -13,7 +13,6 @@ package com.ibm.ws.microprofile.reactive.messaging.fat.kafka.sasl_plain;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,9 +27,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.Test;
 
 import com.ibm.ws.microprofile.reactive.messaging.fat.apps.kafka.BasicMessagingBean;
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.common.KafkaTestConstants;
 import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.AbstractKafkaTestServlet;
-import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.SimpleKafkaReader;
-import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.SimpleKafkaWriter;
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.KafkaReader;
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.KafkaWriter;
 
 @WebServlet("/KafkaTlsTestServlet")
 @ApplicationScoped
@@ -39,7 +39,6 @@ public class KafkaSaslTestServlet extends AbstractKafkaTestServlet {
     public static final String TRUSTSTORE_PASSWORD_PROPERTY = "kafka.truststore.password";
     public static final String TEST_USER_PROPERTY = "kafka.test.user";
     public static final String TEST_SECRET_PROPERTY = "kafka.test.secret";
-    public static final Duration TIMEOUT = Duration.ofSeconds(30);
     public static final String TRUSTSTORE_FILENAME = "kafkaSaslKey.jks";
 
     @Inject
@@ -66,13 +65,13 @@ public class KafkaSaslTestServlet extends AbstractKafkaTestServlet {
         sslConfig.put(SaslConfigs.SASL_JAAS_CONFIG,
                       "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"" + testUser + "\" password=\"" + testSecret + "\";");
 
-        SimpleKafkaReader<String> reader = kafkaTestClient.readerFor(sslConfig, BasicMessagingBean.CHANNEL_OUT);
-        SimpleKafkaWriter<String> writer = kafkaTestClient.writerFor(sslConfig, BasicMessagingBean.CHANNEL_IN);
+        KafkaReader<String, String> reader = kafkaTestClient.readerFor(sslConfig, BasicMessagingBean.CHANNEL_OUT);
+        KafkaWriter<String, String> writer = kafkaTestClient.writerFor(sslConfig, BasicMessagingBean.CHANNEL_IN);
 
         writer.sendMessage("abc");
         writer.sendMessage("xyz");
 
-        List<String> msgs = reader.waitForMessages(2, TIMEOUT);
+        List<String> msgs = reader.assertReadMessages(2, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
 
         assertThat(msgs, contains("cba", "zyx"));
     }

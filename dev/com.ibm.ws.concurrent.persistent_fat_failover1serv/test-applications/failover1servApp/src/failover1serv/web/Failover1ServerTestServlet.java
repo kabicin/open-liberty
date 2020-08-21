@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2019,2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,22 +12,26 @@ package failover1serv.web;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
+import java.lang.management.ManagementFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Resource;
+import javax.management.MBeanServer;
+import javax.management.ObjectInstance;
+import javax.management.ObjectName;
 import javax.naming.InitialContext;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
 import javax.transaction.UserTransaction;
-
-import org.junit.Test;
 
 import com.ibm.websphere.concurrent.persistent.PersistentExecutor;
 import com.ibm.websphere.concurrent.persistent.TaskStatus;
@@ -56,65 +60,46 @@ public class Failover1ServerTestServlet extends FATServlet {
 
         PersistentExecutor executor = (PersistentExecutor) new InitialContext().lookup(jndiName);
 
-        executor.getStatus(taskId).cancel(false);
+        TaskStatus<?> status = executor.getStatus(taskId);
+        if (status != null)
+            status.cancel(false);
     }
 
     /**
-     * testMissedHeartbeatsClearOldPartitionData - insert entries representing missed heartbeats directly into the
-     * database. Verify that they are automatically removed (happens when heartbeat information is checked).
+     * testGetPartitionId - verify that a partition id for the specified executor can be found within an allotted interval.
      */
-    //@Test TODO enable once function (8407) is implemented
-    public void testMissedHeartbeatsClearOldPartitionData(HttpServletRequest request, HttpServletResponse response) throws Exception {
-        // Ensure the database tables are present
-        PersistentExecutor executor = InitialContext.doLookup("persistent/exec2");
-        executor.getProperty("whatever");
+    public void testGetPartitionId(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        String executor = request.getParameter("executor");
 
         DataSource ds = InitialContext.doLookup("java:comp/DefaultDataSource");
         try (Connection con = ds.getConnection()) {
-            PreparedStatement st = con.prepareStatement("INSERT INTO WLPPART(EXECUTOR,HOSTNAME,LSERVER,USERDIR,EXPIRY,STATES) VALUES(?,?,?,?,?,?)");
+            PreparedStatement st = con.prepareStatement("SELECT ID FROM WLPPART WHERE EXECUTOR=?");
+            st.setString(1, executor);
 
-            // insert partition data to simulate a server that stopped sending heartbeats 100 days ago
-            st.setString(1, "oldExecutor1");
-            st.setString(2, "host1.rchland.ibm.com");
-            st.setString(3, "oldServer1");
-            st.setString(4, "/Users/old1/wlp/usr");
-            st.setLong(5, System.currentTimeMillis() - TimeUnit.DAYS.toMillis(100));
-            st.setLong(6, 0);
-            assertEquals(1, st.executeUpdate());
-
-            // insert partition data to simulate a server that stopped sending heartbeats 200 days ago
-            st.setString(1, "oldExecutor2");
-            st.setString(2, "host2.rchland.ibm.com");
-            st.setString(3, "oldServer2");
-            st.setString(4, "/Users/old2/wlp/usr");
-            st.setLong(5, System.currentTimeMillis() - TimeUnit.DAYS.toMillis(200));
-            st.setLong(6, 0);
-            assertEquals(1, st.executeUpdate());
-
-            // insert partition data to simulate another server that stopped sending heartbeats 200 days ago
-            st.setString(1, "oldExecutor3");
-            st.setString(2, "host2.rchland.ibm.com");
-            st.setString(3, "oldServer3");
-            st.setString(4, "/Users/old2/wlp/usr");
-            st.setLong(5, System.currentTimeMillis() - TimeUnit.DAYS.toMillis(200));
-            st.setLong(6, 0);
-            assertEquals(1, st.executeUpdate());
-            st.close();
-
-            // Wait for the above data to be removed due to missed heartbeats
-            st = con.prepareStatement("SELECT EXECUTOR FROM WLPPART WHERE LSERVER LIKE 'oldServer%'");
-            boolean found = true;
-            for (long start = System.nanoTime(); (found = st.executeQuery().next()) && System.nanoTime() - start < TIMEOUT_NS; Thread.sleep(POLL_INTERVAL_MS))
+            ResultSet result;
+            boolean hasNext;
+            for (long start = System.nanoTime(); !(hasNext = (result = st.executeQuery()).next()) && System.nanoTime() - start < TIMEOUT_NS; Thread.sleep(POLL_INTERVAL_MS))
                 ;
 
-            if (found) {
-                StringBuilder sb = new StringBuilder();
-                ResultSet result = st.executeQuery();
-                while (result.next())
-                    sb.append(result.getString(1)).append(' ');
-                result.close();
-                assertEquals("The following entries should have been removed upon detecting missed heartbeats: " + sb.toString(), 0, sb.length());
-            }
+            if (hasNext) {
+                long partitionId = result.getLong(1);
+                response.getWriter().println("Partition id is " + partitionId + ".");
+            } else
+                fail("Partition id for " + executor + " is not found.");
+        }
+    }
+
+    /**
+     * testRemovePartition - removes the specified partition entry.
+     */
+    public void testRemovePartition(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        String executor = request.getParameter("executor");
+
+        DataSource ds = InitialContext.doLookup("java:comp/DefaultDataSource");
+        try (Connection con = ds.getConnection()) {
+            PreparedStatement st = con.prepareStatement("DELETE FROM WLPPART WHERE EXECUTOR=?");
+            st.setString(1, executor);
+            assertEquals(1, st.executeUpdate());
         }
     }
 
@@ -151,6 +136,17 @@ public class Failover1ServerTestServlet extends FATServlet {
         long taskId = status.getTaskId();
 
         response.getWriter().println("Task id is " + taskId + ".");
+    }
+
+    /**
+     * testTablesExist - ensure that tables within the persistent task store exist by looking up a persistent executor
+     * and performing a simple operation on it.
+     */
+    public void testTablesExist(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        // Ensure the database tables are present
+        String jndiName = request.getParameter("jndiName");
+        PersistentExecutor executor = InitialContext.doLookup(jndiName);
+        executor.getProperty("testTablesExist");
     }
 
     /**
@@ -255,5 +251,83 @@ public class Failover1ServerTestServlet extends FATServlet {
             Thread.sleep(POLL_INTERVAL_MS);
         if (!status.hasResult())
             throw new Exception("Task did not complete any executions within allotted interval. " + status);
+    }
+
+    /**
+     * Transfer tasks to the specified instance. The transfer operation is performed via the PersistentExecutor MBean.
+     */
+    public void testTransferWithMBean(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        String jndiName = request.getParameter("jndiName");
+        String[] taskIds = request.getParameterValues("taskId");
+
+        PersistentExecutor executor = InitialContext.doLookup(jndiName);
+        DataSource ds = InitialContext.doLookup("java:comp/DefaultDataSource");
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+        ObjectName obn = new ObjectName("WebSphere:type=PersistentExecutorMBean,jndiName=" + jndiName + ",*");
+        Set<ObjectInstance> s = mbs.queryMBeans(obn, null);
+        if (s.size() != 1) {
+            for (ObjectInstance i : s)
+                System.out.println("  Found MBean: " + i.getObjectName());
+            throw new Exception("Expected to find exactly 1 MBean, instead found " + s.size());
+        }
+        ObjectInstance mbean = s.iterator().next();
+        String[] paramTypes = { "java.lang.Long", "long" };
+
+        for (String taskIdString : taskIds) {
+            long taskId = Long.valueOf(taskIdString);
+            // The only way to find the value stored in a task's PARTN column is to query the database
+            long oldValue;
+            try (Connection con = ds.getConnection()) {
+                PreparedStatement st = con.prepareStatement("SELECT PARTN FROM WLPTASK WHERE ID=?");
+                st.setLong(1, taskId);
+                ResultSet result = st.executeQuery();
+                if (!result.next())
+                    throw new Exception("Task " + taskId + " is not found.");
+                oldValue = result.getLong(1);
+            }
+
+            // Reassign using the mbean
+            int tasksTransferred = (Integer) mbs.invoke(mbean.getObjectName(), "transfer",
+                    new Long[] { taskId, oldValue },
+                    new String[] { "java.lang.Long", "long" });
+
+            if (tasksTransferred < 1)
+                throw new Exception("Task " + taskId + " with " + oldValue + " is not found by mbean " + mbean);
+        }
+    }
+
+    /**
+     * Transfer tasks to the specified instance. The transfer operation is performed by directly updating the database.
+     */
+    public void testTransferWithoutMBean(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        String jndiName = request.getParameter("jndiName");
+        String[] taskIds = request.getParameterValues("taskId");
+
+        PersistentExecutor executor = InitialContext.doLookup(jndiName);
+        DataSource ds = InitialContext.doLookup("java:comp/DefaultDataSource");
+
+        for (String taskIdString : taskIds) {
+            long taskId = Long.valueOf(taskIdString);
+            // The only way to find the value stored in a task's PARTN column is to query the database
+            try (Connection con = ds.getConnection()) {
+                // querying only EXECUTOR and ignoring HOSTNAME, USERDIR, LSERVER columns because there is only one instance
+                PreparedStatement st = con.prepareStatement("SELECT ID FROM WLPPART WHERE EXECUTOR=?");
+                st.setString(1, "persistentExecRFR");
+                ResultSet result = st.executeQuery();
+                if (!result.next())
+                    throw new Exception("Partition entry of current instance is not found." +
+                            " Typically that would indicate the instance hasn't been used yet in order to generate a partion id," +
+                            " but for this particular test, we know it has been used, so this is an error.");
+                long newValue = result.getLong(1);
+                st.close();
+
+                st = con.prepareStatement("UPDATE WLPTASK SET PARTN=? WHERE ID=?");
+                st.setLong(1, newValue);
+                st.setLong(2, taskId);
+                int numUpdates = st.executeUpdate();
+                if (numUpdates < 1)
+                    throw new Exception("Task " + taskId + " is not found in the database.");
+            }
+        }
     }
 }

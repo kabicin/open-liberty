@@ -10,6 +10,7 @@
  *******************************************************************************/
 package com.ibm.ws.jaxrs21.fat;
 
+import org.junit.ClassRule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
@@ -18,8 +19,11 @@ import com.ibm.ws.jaxrs21.fat.security.annotations.JAXRS21SecurityAnnotationsTes
 import com.ibm.ws.jaxrs21.fat.security.annotations.JAXRS21SecurityAnnotationsTestRolesAsGroups;
 import com.ibm.ws.jaxrs21.fat.security.ssl.JAXRS21SecuritySSLTest;
 import com.ibm.ws.jaxrs21.fat.securitycontext.JAXRS21SecurityContextTest;
+import com.ibm.ws.jaxrs21.fat.uriInfo.UriInfoTest;
 
 import componenttest.custom.junit.runner.AlwaysPassesTest;
+import componenttest.rules.repeater.FeatureReplacementAction;
+import componenttest.rules.repeater.RepeatTests;
 
 @RunWith(Suite.class)
 @SuiteClasses({
@@ -27,6 +31,11 @@ import componenttest.custom.junit.runner.AlwaysPassesTest;
                 JAXRS21SecurityAnnotationsTest.class,
                 JAXRS21SecurityAnnotationsTestRolesAsGroups.class,
                 JAXRS21SecurityContextTest.class,
-                JAXRS21SecuritySSLTest.class
+                JAXRS21SecuritySSLTest.class,
+                UriInfoTest.class
 })
-public class FATSuite {}
+public class FATSuite {
+    @ClassRule
+    public static RepeatTests r = RepeatTests.withoutModification()
+        .andWith(new FeatureReplacementAction("jaxrs-2.1", "jaxrs-2.2").withID("RESTEasy"));
+}

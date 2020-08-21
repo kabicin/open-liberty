@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017 IBM Corporation and others.
+ * Copyright (c) 2017,2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,7 +11,11 @@
 package fat.concurrent.spec.app;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -519,7 +523,8 @@ public class EEConcurrencyTestServlet extends FATServlet {
 
         ManagedTaskListener listener = new ManagedTaskListener() {
             @Override
-            public void taskAborted(Future<?> future, ManagedExecutorService executor, Object task, Throwable x) {}
+            public void taskAborted(Future<?> future, ManagedExecutorService executor, Object task, Throwable x) {
+            }
 
             @Override
             public void taskDone(Future<?> future, ManagedExecutorService executor, Object task, Throwable x) {
@@ -735,6 +740,26 @@ public class EEConcurrencyTestServlet extends FATServlet {
                 return null;
             }
         }).get(TIMEOUT * 5, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Tests that a contextual proxy method can raise an exception without causing an FFDC to be logged.
+     */
+    @Test
+    public void testExceptionOnContextualProxyMethod() throws Exception {
+        Closeable contextualCloseable = contextSvcDefault.createContextualProxy(new Closeable() {
+            @Override
+            public void close() throws IOException {
+                throw new IOException("intentional failure");
+            }
+        }, Closeable.class);
+
+        try {
+            contextualCloseable.close();
+            fail("Exception from contextal proxy method was lost.");
+        } catch (IOException x) {
+            assertEquals("intentional failure", x.getMessage());
+        }
     }
 
     /**
@@ -2912,6 +2937,29 @@ public class EEConcurrencyTestServlet extends FATServlet {
         long delay = future.getDelay(TimeUnit.MILLISECONDS);
         if (delay > 0)
             throw new Exception("Completed future should not have a delay: " + delay);
+    }
+
+    /**
+     * Tests the precedence for the ManagedTask.IDENTITY_NAME execution property when different values are
+     * specified for the Jakarta vs Java EE constant for the same task. The enabled spec must take precedence.
+     */
+    @Test
+    public void testIdentityNamePrecedence() throws Exception {
+        String disabledSpecIdentityNameConstant = ManagedTask.class.getPackage().getName().startsWith("jakarta") //
+                        ? ManagedTask.IDENTITY_NAME.replace("jakarta", "javax") //
+                        : ManagedTask.IDENTITY_NAME.replace("javax", "jakarta");
+
+        GetIdentityName getIdentityName = new GetIdentityName();
+        getIdentityName.execProps.put(disabledSpecIdentityNameConstant, "testIdentityNamePrecedence-DoNotUse");
+        getIdentityName.execProps.put(ManagedTask.IDENTITY_NAME, "testIdentityNamePrecedence-Expected");
+
+        ScheduledFuture<String> future = mschedxsvcClassloaderContext.schedule(getIdentityName, getIdentityName);
+
+        final long TIMEOUT_NS = TimeUnit.MILLISECONDS.toNanos(TIMEOUT);
+        for (long start = System.nanoTime(); !future.isDone() && System.nanoTime() - start < TIMEOUT_NS; Thread.sleep(POLL_INTERVAL));
+
+        assertTrue(future.isDone());
+        assertEquals("testIdentityNamePrecedence-Expected", future.get());
     }
 
     /**
@@ -5783,7 +5831,7 @@ public class EEConcurrencyTestServlet extends FATServlet {
      * Tests that managed task listener methods do not run under a transaction.
      */
     @Test
-    public void testListenerTranasactionContextSuspended() throws Throwable {
+    public void testListenerTransactionContextSuspended() throws Throwable {
 
         tran.begin();
         try {
@@ -7831,7 +7879,7 @@ public class EEConcurrencyTestServlet extends FATServlet {
      * Verify that Liberty executor/scheduled executors are always returned ahead of managed ones from EE concurrency.
      * Verify that default instances are always returned ahead of a configured instances.
      *
-     * @param request HTTP request
+     * @param request  HTTP request
      * @param response HTTP response
      * @throws Exception if an error occurs.
      */

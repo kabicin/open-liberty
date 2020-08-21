@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1997, 2018 IBM Corporation and others.
+ * Copyright (c) 1997, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method; 
 import java.lang.reflect.Proxy;
 import java.security.AccessController;
@@ -23,7 +22,6 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.sql.Driver;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
 import java.sql.Statement;
@@ -79,7 +77,6 @@ import com.ibm.ws.resource.ResourceRefInfo;
 import com.ibm.ws.rsadapter.AdapterUtil;
 import com.ibm.ws.rsadapter.DSConfig; 
 import com.ibm.ws.rsadapter.exceptions.DataStoreAdapterException;
-import com.ibm.ws.rsadapter.jdbc.WSJdbcDataSource; 
 import com.ibm.ws.rsadapter.jdbc.WSJdbcTracer;
 
 /**
@@ -292,6 +289,12 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
 
     // Indicates whether the DataSource was used to get a connection.
     private boolean wasUsedToGetAConnection;
+    
+    static enum KerbUsage {
+        NONE,
+        USE_CREDENTIAL,
+        SUBJECT_DOAS
+    }
 
     /**
      * Constructs a managed connection factory based on configuration.
@@ -356,7 +359,7 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
         if (isTraceOn && tc.isEntryEnabled()) 
             Tr.entry(this, tc, "createConnectionFactory", connMgr); 
 
-        DataSource connFactory = jdbcRuntime.newDataSource(this, connMgr);
+        DataSource connFactory = jdbcRuntime.newDataSource(this, (WSConnectionManager) connMgr);
 
         if (isTraceOn && tc.isEntryEnabled())
             Tr.exit(this, tc, "createConnectionFactory", connFactory); 
@@ -608,8 +611,9 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
                 // This list of credentials may have
                 // [A] PasswordCredentials for this ManagedConnection instance, or
                 // [B] GenericCredentials for use with Kerberos support, or
+                // [C] KerberosTicket for use with Kerberos
                 // no credentials at all.
-
+                
                 final Iterator<Object> iter = subject.getPrivateCredentials().iterator();
 
                 PrivilegedAction<Object> iterationAction = new PrivilegedAction<Object>() {
@@ -631,7 +635,7 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
                     {
                         credential = iter.next(); 
                     } 
-
+                    
                     if (credential instanceof PasswordCredential) {
                         //This is possibly Option A - only possibly because the PasswordCredential
                         // may not match the MC.  Then we have to keep looping.
@@ -651,9 +655,8 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
                         useKerb = true;
                         //This is option B
                         if (isAnyTraceOn && tc.isEventEnabled()) 
-                            Tr.event(this, tc, "Using GenericCredentials for authentication");
+                            Tr.event(this, tc, "Using GSSCredential for authentication");
                         break;
-
                     }
                 }
             } //end else Check for PasswordCredential or Kerbros GenericCredential
@@ -662,7 +665,8 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
         WSRdbManagedConnectionImpl mc = null;
         ConnectionResults results = null; 
         try {
-            results = getConnection(userName, password, subject, cri, useKerb, credential);
+            KerbUsage kerbUsage = useKerb ? KerbUsage.USE_CREDENTIAL : KerbUsage.NONE;
+            results = getConnection(userName, password, subject, cri, kerbUsage, credential);
 
             mc = new WSRdbManagedConnectionImpl(this, results.pooledConnection, results.connection, subject, cri);
 
@@ -749,7 +753,7 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
      * @return the pooled connection, cookie, and connection
      */
     private ConnectionResults getConnection(final String userName, final String password,
-                                            final Subject subject, final WSConnectionRequestInfoImpl cri, boolean useKerb,
+                                            final Subject subject, final WSConnectionRequestInfoImpl cri, KerbUsage useKerb,
                                             final Object credential)
                     throws ResourceException {
         final boolean trace = TraceComponent.isAnyTracingEnabled();
@@ -762,7 +766,7 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
         Connection conn;
 
         // Some JDBC drivers support propagation of GSS credential for kerberos via Subject.doAs
-        if (useKerb && helper.supportsSubjectDoAsForKerberos())
+        if (useKerb == KerbUsage.USE_CREDENTIAL && helper.supportsSubjectDoAsForKerberos()) {
             try {
                 // Run this method as the subject.
 
@@ -771,7 +775,7 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
                                 {
                                     public ConnectionResults run() throws ResourceException
                                     {
-                                        return getConnection(userName, password, subject, cri, false, credential);
+                                        return getConnection(userName, password, subject, cri, KerbUsage.SUBJECT_DOAS, credential);
                                     }
                                 };
 
@@ -808,7 +812,7 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
                     // shouldn't ever happen
                     throw new DataStoreAdapterException("GENERAL_EXCEPTION", null, getClass(), x.getMessage());
             }
-        else if (DataSource.class.equals(type))
+        } else if (DataSource.class.equals(type))
         {
             if (trace && tc.isDebugEnabled())
                 Tr.debug(this, tc, "Getting a connection using Datasource. Is UCP? " + isUCP);
@@ -821,7 +825,8 @@ public class WSManagedConnectionFactoryImpl extends WSManagedConnectionFactory i
             results = new ConnectionResults(null, conn);
         } else {
             try {
-                results = helper.getPooledConnection((CommonDataSource) dataSourceOrDriver, userName, password, XADataSource.class.equals(type), cri, useKerb, credential);
+                results = helper.getPooledConnection((CommonDataSource) dataSourceOrDriver, userName, password, 
+                                                     XADataSource.class.equals(type), cri, useKerb, credential);
             } catch (DataStoreAdapterException dae) {
                 throw (ResourceException) AdapterUtil.mapException(dae, null, this, false); // error can't be fired as we don't have an mc
             }

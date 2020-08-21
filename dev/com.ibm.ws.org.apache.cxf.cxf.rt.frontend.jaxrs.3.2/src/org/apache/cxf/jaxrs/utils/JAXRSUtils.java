@@ -30,6 +30,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
@@ -50,6 +52,8 @@ import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
+import javax.json.bind.JsonbException;
+import javax.ws.rs.BadRequestException;
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.HttpMethod;
@@ -93,7 +97,6 @@ import org.apache.cxf.common.util.StringUtils;
 import org.apache.cxf.helpers.DOMUtils;
 import org.apache.cxf.helpers.IOUtils;
 import org.apache.cxf.interceptor.Fault;
-import org.apache.cxf.io.DelegatingInputStream;
 import org.apache.cxf.io.ReaderInputStream;
 import org.apache.cxf.jaxrs.JAXRSServiceImpl;
 import org.apache.cxf.jaxrs.ext.ContextProvider;
@@ -140,6 +143,7 @@ import org.apache.cxf.jaxrs.provider.ServerProviderFactory;
 import org.apache.cxf.jaxrs.utils.multipart.AttachmentUtils;
 import org.apache.cxf.message.Exchange;
 import org.apache.cxf.message.Message;
+import org.apache.cxf.message.MessageImpl;
 import org.apache.cxf.message.MessageUtils;
 import org.apache.cxf.phase.PhaseInterceptorChain;
 import org.apache.cxf.service.Service;
@@ -277,7 +281,6 @@ public final class JAXRSUtils {
         injectParameters(ori, ori.getClassResourceInfo(), requestObject, message);
     }
 
-    @SuppressWarnings("unchecked")
     public static void injectParameters(OperationResourceInfo ori,
                                         BeanResourceInfo bri,
                                         Object requestObject,
@@ -290,7 +293,10 @@ public final class JAXRSUtils {
             }
         }
         // Param methods
-        MultivaluedMap<String, String> values = (MultivaluedMap<String, String>) message.get(URITemplate.TEMPLATE_PARAMETERS);
+        @SuppressWarnings("unchecked")
+        //Liberty code change start
+        MultivaluedMap<String, String> values = (MultivaluedMap<String, String>)((MessageImpl) message).getTemplateParameters();
+        //Liberty code change end
         for (Method m : bri.getParameterMethods()) {
             Parameter p = ResourceUtils.getParameter(0, m.getAnnotations(),
                                                      m.getParameterTypes()[0]);
@@ -540,7 +546,9 @@ public final class JAXRSUtils {
         }
         Map.Entry<ClassResourceInfo, MultivaluedMap<String, String>> firstCri = matchedResources.entrySet().iterator().next();
         String name = firstCri.getKey().isRoot() ? "NO_OP_EXC" : "NO_SUBRESOURCE_METHOD_FOUND";
-        org.apache.cxf.common.i18n.Message errorMsg = new org.apache.cxf.common.i18n.Message(name, BUNDLE, message.get(Message.REQUEST_URI), getCurrentPath(firstCri.getValue()), httpMethod, mediaTypeToString(requestType), convertTypesToString(acceptContentTypes));
+        //Liberty code change start
+        org.apache.cxf.common.i18n.Message errorMsg = new org.apache.cxf.common.i18n.Message(name, BUNDLE, ((MessageImpl) message).getRequestUri(), getCurrentPath(firstCri.getValue()), httpMethod, mediaTypeToString(requestType), convertTypesToString(acceptContentTypes));
+        //Liberty code change end
         if (!"OPTIONS".equalsIgnoreCase(httpMethod)) {
             Level logLevel = getExceptionLogLevel(message, ClientErrorException.class);
             if (logLevel != null && logLevel.intValue() >= Level.WARNING.intValue()) {
@@ -628,11 +636,45 @@ public final class JAXRSUtils {
 
     public static Response createResponse(List<ClassResourceInfo> cris, Message msg,
                                           String responseMessage, int status, boolean addAllow) {
+        
         ResponseBuilder rb = toResponseBuilder(status);
-        if (addAllow) {
-            Set<String> allowedMethods = new HashSet<>();
+        if (addAllow) {                       
+            Map<ClassResourceInfo, MultivaluedMap<String, String>> matchedResources = null; //Liberty change
+            Set<String> allowedMethods = new HashSet<String>();            
             for (ClassResourceInfo cri : cris) {
-                allowedMethods.addAll(cri.getAllowedMethods());
+                //Liberty Change start
+                if (cri.getParent() != null) {
+                   // Sub-resource
+                    allowedMethods.addAll(cri.getAllowedMethods());
+                    if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                        Tr.debug(tc, "Adding All Allowed Headers " + cri.getAllowedMethods());                        
+                    }
+                    break;
+                }
+                
+                for (OperationResourceInfo ori : cri.getMethodDispatcher().getOperationResourceInfos()) {
+                    if(ori.isSubResourceLocator()) {
+                        continue;
+                    }
+                    if (matchedResources == null) {
+                        String messagePath = HttpUtils.getPathToMatch(msg, true);
+                        matchedResources = JAXRSUtils.selectResourceClass(cris, messagePath, msg);
+                    }
+                    MultivaluedMap<String, String> values =  matchedResources.get(cri);
+                    if (values == null) {
+                        continue;
+                    }
+                    String httpMethod = ori.getHttpMethod();
+                    if (isFinalPath(ori,values)) {                        
+                        if (matchHttpMethod(httpMethod, "*")) {                                
+                            allowedMethods.add(httpMethod);
+                            if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                                Tr.debug(tc, "Adding Allow Header " + httpMethod);
+                            }                                
+                        }
+                    }
+                }
+                //Liberty Change end
             }
 
             for (String m : allowedMethods) {
@@ -653,10 +695,29 @@ public final class JAXRSUtils {
     }
 
     private static boolean matchHttpMethod(String expectedMethod, String httpMethod) {
-        return expectedMethod.equalsIgnoreCase(httpMethod)
-               || headMethodPossible(expectedMethod, httpMethod)
-               || expectedMethod.equals(DefaultMethod.class.getSimpleName());
-    }
+        //Liberty Change start 
+          if ("*".equals(httpMethod)) {
+              return true;
+          }
+        //Liberty Change end 
+          return expectedMethod.equalsIgnoreCase(httpMethod)
+                 || headMethodPossible(expectedMethod, httpMethod)
+                 || expectedMethod.equals(DefaultMethod.class.getSimpleName());
+      }
+
+    //Liberty Change start 
+      private static boolean isFinalPath(OperationResourceInfo ori, MultivaluedMap<String, String> values) {
+          boolean finalPath = false;
+          String path = getCurrentPath(values);
+          URITemplate uriTemplate = ori.getURITemplate();
+          MultivaluedMap<String, String> map = new MetadataMap<>(values);
+          if (uriTemplate != null && uriTemplate.match(path, map)) {
+              String finalGroup = map.getFirst(URITemplate.FINAL_MATCH_GROUP);
+              finalPath = StringUtils.isEmpty(finalGroup) || PATH_SEGMENT_SEP.equals(finalGroup);
+          }
+          return finalPath;
+      }
+    //Liberty Change end 
 
     public static boolean headMethodPossible(String expectedMethod, String httpMethod) {
         return HttpMethod.HEAD.equalsIgnoreCase(httpMethod) && HttpMethod.GET.equals(expectedMethod);
@@ -992,8 +1053,10 @@ public final class JAXRSUtils {
                                              Annotation[] paramAnns,
                                              String defaultValue,
                                              boolean decode) {
-        List<PathSegment> segments = JAXRSUtils.getPathSegments(
-                                                                (String) m.get(Message.REQUEST_URI), decode);
+        //Liberty code change start
+        List<PathSegment> segments = JAXRSUtils.getPathSegments((String) ((MessageImpl) m).getRequestUri(), decode);
+        //Liberty code change end
+
         if (!segments.isEmpty()) {
             MultivaluedMap<String, String> params = new MetadataMap<>();
             for (PathSegment ps : segments) {
@@ -1158,7 +1221,9 @@ public final class JAXRSUtils {
     public static Message getContextMessage(Message m) {
 
         Message contextMessage = m.getExchange() != null ? m.getExchange().getInMessage() : m;
-        if (contextMessage == null && !PropertyUtils.isTrue(m.get(Message.INBOUND_MESSAGE))) {
+        //Liberty code change start
+        if (contextMessage == null && !PropertyUtils.isTrue(((MessageImpl) m).getInboundMessage())) {
+            //Liberty code change end
             contextMessage = m;
         }
         return contextMessage;
@@ -1209,12 +1274,14 @@ public final class JAXRSUtils {
         return clazz.cast(o);
     }
 
-    @SuppressWarnings("unchecked")
     private static UriInfo createUriInfo(Message m) {
         if (MessageUtils.isRequestor(m)) {
             m = m.getExchange() != null ? m.getExchange().getOutMessage() : m;
         }
-        MultivaluedMap<String, String> templateParams = (MultivaluedMap<String, String>) m.get(URITemplate.TEMPLATE_PARAMETERS);
+        @SuppressWarnings("unchecked")
+        //Liberty code change start
+        MultivaluedMap<String, String> templateParams = (MultivaluedMap<String, String>)((MessageImpl) m).getTemplateParameters();
+        //Liberty code change end
         return new UriInfoImpl(m, templateParams);
     }
 
@@ -1409,7 +1476,7 @@ public final class JAXRSUtils {
     }
 
     @SuppressWarnings("unchecked")
-    @FFDCIgnore(PrivilegedActionException.class)
+    @FFDCIgnore({ PrivilegedActionException.class, JsonbException.class })
     public static Object readFromMessageBodyReader(List<ReaderInterceptor> readers,
                                                    Class<?> targetTypeClass,
                                                    final Type parameterType,
@@ -1439,9 +1506,13 @@ public final class JAXRSUtils {
             });
         } catch (PrivilegedActionException e) {
             Exception e1 = e.getException();
-            if (e1 instanceof IOException)
+            if (e1 instanceof IOException) {
                 throw (IOException) e1;
+            }
             throw (WebApplicationException) e1;
+        } catch (JsonbException e) { // JsonBProvider throws a RuntimeException
+            // return HTTP 400 instead of 500
+            throw new BadRequestException(e);
         }
         // Liberty change end
     }
@@ -1712,6 +1783,59 @@ public final class JAXRSUtils {
         return types;
     }
 
+    //Liberty change start
+    public static List<Charset> sortCharsets(List<?> charsetHeaderValues) {
+        if (charsetHeaderValues == null || charsetHeaderValues.size() < 1) {
+            return Collections.emptyList();
+        }
+        return charsetHeaderValues.stream()
+                                  .map(CharsetQualityTuple::parseTuple)
+                                  .sorted((t1, t2) -> { return Float.compare(t1.quality, t2.quality) * -1; })
+                                  .filter(t -> { return t.charset != null && t.quality > 0; })
+                                  .map(t -> { return t.charset; })
+                                  .collect(Collectors.toList());
+    }
+
+    private static class CharsetQualityTuple {
+        Charset charset;
+        float quality = 1; // aka weight
+
+        @FFDCIgnore(IllegalCharsetNameException.class)
+        static CharsetQualityTuple parseTuple(Object o) {
+            String s;
+            if (o instanceof String) {
+                s = (String) o;
+            } else {
+                s = o.toString();
+            }
+            CharsetQualityTuple tuple = new CharsetQualityTuple();
+            String[] sArr = s.split(";[qQ]=");
+            if (sArr.length > 1) {
+                try {
+                    float f = Float.parseFloat(sArr[1]);
+                    tuple.quality = Float.min(1.0f, Float.max(0f, f));
+                } catch (NumberFormatException ex) {
+                    if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                        Tr.debug(tc, "Invalid charset weight (" + s + ") - defaulting to 0.");
+                    }
+                    tuple.quality = 0;
+                }
+            }
+            try {
+                if (Charset.isSupported(sArr[0])) {
+                    tuple.charset = Charset.forName(sArr[0]);
+                } else if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                    Tr.debug(tc, "Unsupported charset, " + sArr[0]);
+                }
+            } catch (IllegalCharsetNameException ex) {
+                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                    Tr.debug(tc, "Illegal charset name, " + sArr[0]);
+                }
+            }
+            return tuple;
+        }
+    }
+    //Liberty change end
     public static <T extends Throwable> Response convertFaultToResponse(T ex, Message currentMessage) {
         return ExceptionUtils.convertFaultToResponse(ex, currentMessage);
     }
@@ -1879,10 +2003,12 @@ public final class JAXRSUtils {
     public static void pushOntoStack(OperationResourceInfo ori,
                                      MultivaluedMap<String, String> params,
                                      Message msg) {
-        OperationResourceInfoStack stack = msg.get(OperationResourceInfoStack.class);
+        //Liberty code change start
+        OperationResourceInfoStack stack = (OperationResourceInfoStack) ((MessageImpl) msg).getOperationResourceInfoStack();
         if (stack == null) {
             stack = new OperationResourceInfoStack();
-            msg.put(OperationResourceInfoStack.class, stack);
+            ((MessageImpl) msg).setOperationResourceInfoStack(stack);
+            //Liberty code change end
         }
 
         List<String> values = null;
@@ -1925,10 +2051,15 @@ public final class JAXRSUtils {
     // copy the input stream so that it is not inadvertently closed
     private static InputStream copyAndGetEntityStream(Message m) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        InputStream origInputStream = m.getContent(InputStream.class);
         try {
-            IOUtils.copy(m.getContent(InputStream.class), baos);
+            IOUtils.copy(origInputStream, baos);
         } catch (IOException e) {
             throw ExceptionUtils.toInternalServerErrorException(e, null);
+        } finally {
+            try {
+                origInputStream.close();
+            } catch (Throwable t) { /* AutoFFDC */ }
         }
         final byte[] copiedBytes = baos.toByteArray();
         m.setContent(InputStream.class, new ByteArrayInputStream(copiedBytes));

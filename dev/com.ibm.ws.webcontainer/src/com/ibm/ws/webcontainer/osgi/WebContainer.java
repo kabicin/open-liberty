@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2015 IBM Corporation and others.
+ * Copyright (c) 2010, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -18,7 +18,6 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -26,7 +25,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 
@@ -62,8 +60,8 @@ import com.ibm.ws.ffdc.annotation.FFDCIgnore;
 import com.ibm.ws.javaee.version.ServletVersion;
 import com.ibm.ws.managedobject.ManagedObjectService;
 import com.ibm.ws.runtime.metadata.ModuleMetaData;
-import com.ibm.ws.staticvalue.StaticValue;
 import com.ibm.ws.threading.FutureMonitor;
+import com.ibm.ws.threading.listeners.CompletionListener;
 import com.ibm.ws.webcontainer.SessionRegistry;
 import com.ibm.ws.webcontainer.async.AsyncContextFactory;
 import com.ibm.ws.webcontainer.collaborator.CollaboratorService;
@@ -229,12 +227,7 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
     private static final int DEFAULT_MAX_VERSION = 30;
     private ServiceReference<ServletVersion> versionRef;
     
-    private static StaticValue<AtomicBoolean> serverStopping = StaticValue.createStaticValue(new Callable<AtomicBoolean>() {
-        @Override
-        public AtomicBoolean call() throws Exception {
-            return new AtomicBoolean();
-        }
-    });
+    private static boolean serverStopping = false;
 
     private volatile int modulesStarting=0;
     
@@ -324,14 +317,14 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
     
     
     public static void setServerStopping(boolean serverStop) {
-        serverStopping.get().set(serverStop);
+        serverStopping = serverStop;
     }
     
     public static boolean isServerStopping() {
         if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
             Tr.debug(tc, "serverStopping = " + serverStopping );
         }    
-       return serverStopping.get().get();
+       return serverStopping;
     }
     
     public void waitForApplicationInitialization(){
@@ -677,30 +670,48 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
 
         return vhostManager.getVirtualHost(targetHost, this);
     }
-
+    
     public Future<Boolean> addContextRootRequirement(DeployedModule deployedModule) {
-        String methodName ="addContextRootRequirement";
+        String methodName = "addContextRootRequirement";
         String contextRoot = deployedModule.getMappingContextRoot();
         synchronized (contextRoots) {
-            if (contextRoots.contains(contextRoot)) {
-                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                    Tr.debug(tc, methodName, "contextRoot-> ["+ contextRoot+"] already added , set future done for deployedModule -->" + deployedModule);
-                }
-                return futureMonitor.createFutureWithResult(true);
-            }
-            Set<DeployedModule> pending = pendingContextRoots.get(contextRoot);
-            if (pending == null) {
-                pending = new LinkedHashSet<DeployedModule>();
-                pendingContextRoots.put(contextRoot, pending);
-            }
 
             Future<Boolean> future = futureMonitor.createFuture(Boolean.class);
-            deployedModule.setContextRootAdded(future);
-            pending.add(deployedModule);
-            if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                Tr.debug(tc, methodName, "contextRoot-> ["+ contextRoot+"] not added , in pending future "+future+" for deployedModule -->" + deployedModule);
+            // This listener is added to track conetxtRoot future and the web application init
+            deployedModule.addStartupListener(future, new CompletionListener<Boolean>() {
+                @Override
+                public void failedCompletion(Future<Boolean> arg0, Throwable arg1) {
+                }
+
+                @Override
+                public void successfulCompletion(Future<Boolean> arg0, Boolean arg1) {
+                    futureMonitor.setResult(arg0, arg1);
+                }
+            });
+
+            if (contextRoots.contains(contextRoot)) {
+                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                    Tr.debug(tc, methodName, "contextRoot-> [" + contextRoot + "] already added , set future done for deployedModule -->" + deployedModule);
+                }
+                //complete the notification here for app manager
+                deployedModule.initTaskComplete();
+
+            } else {
+
+                Set<DeployedModule> pending = pendingContextRoots.get(contextRoot);
+                if (pending == null) {
+                    pending = new LinkedHashSet<DeployedModule>();
+                    pendingContextRoots.put(contextRoot, pending);
+                }
+
+                pending.add(deployedModule);
+
+                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                    Tr.debug(tc, methodName, "contextRoot-> [" + contextRoot + "] not added , in pending future " + future + " for deployedModule -->" + deployedModule);
+                }
             }
             return future;
+
         }
     }
 
@@ -729,7 +740,8 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
             Set<DeployedModule> pending = pendingContextRoots.remove(contextRoot);
             if (pending != null) {
                 for (DeployedModule deployedModule : pending) {
-                    futureMonitor.setResult(deployedModule.getContextRootAdded(), true);
+                    //complete the notification here for app manager
+                    deployedModule.initTaskComplete();
                 }
             }
         }
@@ -850,6 +862,9 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
             if ((cause!=null) && (cause instanceof MetaDataException)) {
                 m = (MetaDataException) cause;
                 //don't log a FFDC here as we already logged an exception
+            } else if ( instance.get() == null ) {
+                // The web container is deactivated, let the upstream call handle this
+                m = new MetaDataException(e);
             } else {
                 m = new MetaDataException(e);
                 FFDCWrapper.processException(e, getClass().getName(), "createModuleMetaData", new Object[] { webModule, this });//this throws the exception
@@ -862,6 +877,9 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
     }
 
     private WebApp createWebApp(ModuleInfo moduleInfo, WebAppConfiguration webAppConfig) {
+        if (instance.get() == null ) {
+            throw new IllegalStateException("The web container has been deactivated");
+        }
         ReferenceContext referenceContext = injectionEngineSRRef.getServiceWithException().getCommonReferenceContext(webAppConfig.getMetaData());
         ManagedObjectService managedObjectService = managedObjectServiceSRRef.getServiceWithException();
         
@@ -941,7 +959,7 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
                 final DeployedModule dMod = new DeployedModule(webModuleContainer, appConfig, threadClassLoader);
                 this.deployedModuleMap.put(webModule, dMod);
                 addWebApplication(dMod);
-            
+                result =  addContextRootRequirement(dMod);
                 // If the Webcontainer attribute "deferServletLoad" is set to "false" (not the default)
                 // then start the web application now, inline on this thread
                 // otherwise, launch is on its own thread
@@ -954,11 +972,19 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
                         @Override
                         public void run() {
                             try {
-                                startWebApplication(dMod);
+                                if (startWebApplication(dMod)) {
+                                    if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                                        Tr.debug(tc, "startWebApplication async [" + webModule.getName() + "]: success.");
+                                    }
+                                } else {
+                                    throw new Exception("startWebApplication async [" + webModule.getName() + "]: failed.");
+                                }
                             } catch (Throwable e) {
-                                FFDCWrapper.processException(e, getClass().getName(), "startModule async", new Object[] { webModule, this });
-                                if (TraceComponent.isAnyTracingEnabled() && tc.isEventEnabled()) {
-                                    Tr.event(tc, "startModule async: " + webModule.getName() + "; " + e);
+                                if (dMod != null && dMod instanceof com.ibm.ws.webcontainer.osgi.container.DeployedModule) {
+                                    ((com.ibm.ws.webcontainer.osgi.container.DeployedModule) dMod).initTaskFailed();
+                                }
+                                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                                    Tr.debug(tc, "startModule async [" + webModule.getContextRoot() + "]; " + e);
                                 }
                                 stopModule(moduleInfo);
                             }
@@ -966,7 +992,7 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
                     });
                 }
                 registerMBeans((WebModuleMetaDataImpl) wmmd, webModuleContainer);
-                result =  addContextRootRequirement(dMod);
+                
             }
         } catch (Throwable e) {
             FFDCWrapper.processException(e, getClass().getName(), "startModule", new Object[] { webModule, this });
@@ -1559,6 +1585,7 @@ public class WebContainer extends com.ibm.ws.webcontainer.WebContainer implement
     public static final int SPEC_LEVEL_30 = 30;
     public static final int SPEC_LEVEL_31 = 31;
     public static final int SPEC_LEVEL_40 = 40;
+    public static final int SPEC_LEVEL_50 = 50;
     private static final int DEFAULT_SPEC_LEVEL = 30;
     
     private static int loadedContainerSpecLevel = SPEC_LEVEL_UNLOADED;

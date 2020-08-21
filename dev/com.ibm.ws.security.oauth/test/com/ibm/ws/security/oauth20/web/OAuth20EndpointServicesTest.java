@@ -183,6 +183,22 @@ public class OAuth20EndpointServicesTest {
         }
     }
 
+    @Test
+    public void testURLEncodeParams() {
+        OAuth20EndpointServices oas = new OAuth20EndpointServices();
+        String in = "https://www.somewhere.com?item=s巧";
+        String expected = "https://www.somewhere.com?item=s%E5%B7%A7";
+        String actual = oas.URLEncodeParams(in);
+        assertTrue("url encode not as expected: " + actual, actual.equals(expected));
+
+        in = "https://www.somewhere.com";
+        assertTrue("url encode 2 not as expected", oas.URLEncodeParams(in).equals(in));
+
+        in = "https://www.somewhere.com?item=s%4";
+        assertTrue("url containing % should not have been encoded again", oas.URLEncodeParams(in).equals(in));
+
+    }
+
     /**
      * Test good token
      *
@@ -707,7 +723,7 @@ public class OAuth20EndpointServicesTest {
         final OAuth20Request oauth20Request = new OAuth20Request("providerThatDoesNotExist", EndpointType.authorize, req);
         mock.checking(new Expectations() {
             {
-                one(req).getAttribute("OAuth20Request");
+                one(req).getAttribute(OAuth20Constants.OAUTH_REQUEST_OBJECT_ATTR_NAME);
                 will(returnValue(oauth20Request));
             }
         });

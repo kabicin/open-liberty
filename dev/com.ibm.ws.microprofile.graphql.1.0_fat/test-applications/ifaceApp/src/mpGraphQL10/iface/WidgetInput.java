@@ -3,9 +3,11 @@
  */
 package mpGraphQL10.iface;
 
-import org.eclipse.microprofile.graphql.InputType;
+import org.eclipse.microprofile.graphql.Description;
+import org.eclipse.microprofile.graphql.Input;
 
-@InputType(value="WidgetInput", description="A for-sale item object used for input.")
+@Input("WidgetInput")
+@Description("A for-sale item object used for input.")
 public class WidgetInput{
 
     private String name;

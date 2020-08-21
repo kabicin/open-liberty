@@ -41,7 +41,7 @@ public class Launcher {
      * command line parameters. This method will call <code>System.exit</code> when the framework shuts down.
      *
      * @param args
-     *            Command line arguments.
+     *                 Command line arguments.
      * @throws Exception
      *
      * @see Launcher#createPlatform(String[])
@@ -58,7 +58,7 @@ public class Launcher {
      * running) will immediately return.
      *
      * @param args
-     *            Command line arguments
+     *                 Command line arguments
      *
      * @return 0 if platform was launched and shut down successfully, > 20 if
      *         an exception or unexpected condition occurred during
@@ -229,7 +229,7 @@ public class Launcher {
     /**
      * Handle the process action.
      *
-     * @param bootProps An instance of BootstrapConfig
+     * @param bootProps  An instance of BootstrapConfig
      * @param launchArgs An instance of LaunchArguments
      */
     protected ReturnCode handleActions(BootstrapConfig bootProps, LaunchArguments launchArgs) {
@@ -300,12 +300,18 @@ public class Launcher {
     /**
      * Find main locations
      *
-     * @param bootProps An instance of BootstrapConfig
+     * @param bootProps   An instance of BootstrapConfig
      * @param processName Process name to be used
      */
     protected void findLocations(BootstrapConfig bootProps, String processName) {
+
         // Check for environment variables...
-        String userDirStr = getEnv(BootstrapConstants.ENV_WLP_USER_DIR);
+
+        String userDirStr = null;
+        // If this property is set we want to ignore the WLP_USER_DIR env var and leave this as null to default later on.
+        if (!Boolean.getBoolean(BootstrapConstants.LOC_PROPERTY_IGNORE_INSTANCE_DIR_FROM_ENV)) {
+            userDirStr = getEnv(BootstrapConstants.ENV_WLP_USER_DIR);
+        }
         String serversDirStr = getEnv(bootProps.getOutputDirectoryEnvName());
 
         // Check for the variable calculated by the shell script first (X_LOG_DIR)
@@ -319,9 +325,9 @@ public class Launcher {
         if (consoleLogFileStr == null)
             consoleLogFileStr = getEnv(BootstrapConstants.ENV_LOG_FILE);
 
-        // Do enough processing to know where the directories should be..
+        // Do enough processing to know where the directories should be.
         // this should not cause any directories to be created
-        bootProps.findLocations(processName, userDirStr, serversDirStr, logDirStr, consoleLogFileStr);
+        bootProps.findLocations(processName, userDirStr, serversDirStr, logDirStr, consoleLogFileStr, null);
     }
 
     protected ReturnCode showHelp(LaunchArguments launchArgs) {
@@ -360,7 +366,7 @@ public class Launcher {
      * properties.
      *
      * @param key
-     *            Property key
+     *                Property key
      * @return Object value, or null if not found.
      */
     protected String getEnv(final String key) {

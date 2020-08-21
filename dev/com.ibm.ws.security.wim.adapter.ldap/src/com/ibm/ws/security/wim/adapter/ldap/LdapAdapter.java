@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012, 2018 IBM Corporation and others.
+ * Copyright (c) 2012, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -325,7 +325,7 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
         boolean needMbrAttr = false;
 
         if (grpMbrCtrl != null
-            && (iLdapConfigMgr.getMembershipAttribute() == null || !iLdapConfigMgr.isDefaultMbrAttr())) {
+            && (iLdapConfigMgr.getMembershipAttribute() == null || !iLdapConfigMgr.isDefaultMbrAttr() || iLdapConfigMgr.isRacf())) {
             needMbrAttr = true;
         }
 
@@ -577,10 +577,8 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
                          * Tr.error(tc, WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, WIMMessageHelper.generateMsgParms(principalName));
                          * }
                          */
-                        throw new PasswordCheckFailedException(WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, Tr.formatMessage(
-                                                                                                                         tc,
-                                                                                                                         WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND,
-                                                                                                                         WIMMessageHelper.generateMsgParms(principalName)));
+                        String msg = Tr.formatMessage(tc, WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, WIMMessageHelper.generateMsgParms(principalName));
+                        throw new PasswordCheckFailedException(WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, msg);
                     } else if (ldapEntries.size() == 1) {
                         if (count == 0) {
                             acctEntry = ldapEntries.iterator().next();
@@ -593,10 +591,8 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
                              * Tr.error(tc, WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, WIMMessageHelper.generateMsgParms(principalName));
                              * }
                              */
-                            throw new PasswordCheckFailedException(WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, Tr.formatMessage(
-                                                                                                                             tc,
-                                                                                                                             WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND,
-                                                                                                                             WIMMessageHelper.generateMsgParms(principalName)));
+                            String msg = Tr.formatMessage(tc, WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, WIMMessageHelper.generateMsgParms(principalName));
+                            throw new PasswordCheckFailedException(WIMMessageKey.MULTIPLE_PRINCIPALS_FOUND, msg);
                         }
                     }
                 } catch (EntityNotFoundException e) {
@@ -906,8 +902,12 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
      * @return
      * @throws WIMException
      */
+    @Trivial // parentDO can be very large, override entry / exit to avoid printing out such a large object to trace
     private Entity createEntityFromLdapEntry(Object parentDO, String propName, LdapEntry ldapEntry, List<String> propNames) throws WIMException {
         final String METHODNAME = "createEntityFromLdapEntry";
+        if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
+            Tr.entry(tc, METHODNAME, (parentDO == null) ? "null" : parentDO.getClass(), propName, ldapEntry, propNames);
+        }
 
         String outEntityType = ldapEntry.getType();
         Entity outEntity = null;
@@ -965,6 +965,10 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
             }
         } else {
             populateEntity(outEntity, propNames, ldapEntry.getAttributes());
+        }
+
+        if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
+            Tr.exit(tc, METHODNAME, outEntity);
         }
         return outEntity;
     }
@@ -1343,12 +1347,11 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
             bases = baseList.toArray(new String[0]);
         }
         bases = NodeHelper.getTopNodes(bases);
-        if (iLdapConfigMgr.getMembershipAttribute() != null) {
-            if (iLdapConfigMgr.isRacf())
-                getGroupsByMembershipRacf(entity, ldapEntry, bases, level, propNames, null);
-            else {
-                getGroupsByMembership(entity, ldapEntry, bases, level, propNames, null);
-            }
+
+        if (iLdapConfigMgr.isRacf()) {
+            getGroupsByMembershipRacf(entity, ldapEntry, bases, level, propNames, null);
+        } else if (iLdapConfigMgr.getMembershipAttribute() != null) {
+            getGroupsByMembership(entity, ldapEntry, bases, level, propNames, null);
         } else {
             // If operational attribute "ibm-allGroups" is specified in groupMemberIdMap, then get groups using operational attr "ibm-allGroups"
             if (LdapConstants.IDS_LDAP_SERVER.equalsIgnoreCase(iLdapConfigMgr.getLdapType()) && iLdapConfigMgr.isLdapOperationalAttributeSet())
@@ -1372,7 +1375,7 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
         final String METHODNAME = "getGroupsByMembershipRacf";
         boolean isInGrp = false;
 
-        String mbrshipAttrName = iLdapConfigMgr.getMembershipAttribute();
+        String mbrshipAttrName = LdapConstants.LDAP_ATTR_RACF_CONNECT_GROUP_NAME;
         Attribute mbrshipAttr = ldapEntry.getAttributes().get(mbrshipAttrName);
         if (mbrshipAttr == null || mbrshipAttr.size() == 0) {
             String dn = ldapEntry.getDN();
@@ -1421,7 +1424,7 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
                     grpEntry = iLdapConn.getEntityByIdentifier(dn, null, null, groupTypes, supportedProps, false, false);
                 } catch (EntityNotFoundException e) {
                     if (tc.isDebugEnabled()) {
-                        Tr.debug(tc, METHODNAME + " Group " + dn + " is not found and ingored.");
+                        Tr.debug(tc, METHODNAME + " Group " + dn + " is not found and ignored.");
                     }
                     continue;
                 }
@@ -1926,12 +1929,13 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
         List<String> mbrTypes = getEntityTypes(grpMbrCtrl);
         String[] bases = getBases(grpMbrCtrl, mbrTypes);
 
-        if (!iLdapConfigMgr.isDefaultMbrAttr()) {
+        if (!iLdapConfigMgr.isDefaultMbrAttr() || iLdapConfigMgr.isRacf()) {
             getMembersByMember(entity, ldapEntry, bases, level, propNames, mbrTypes);
         } else if (iLdapConfigMgr.getMembershipAttribute() != null) {
             getMembersByMembership(entity, ldapEntry, bases, level, propNames, mbrTypes);
-        } else
+        } else {
             getMembersByMember(entity, ldapEntry, bases, level, propNames, mbrTypes);
+        }
     }
 
     private List<String> getEntityTypes(SearchControl ctrl) throws WIMException {
@@ -2821,7 +2825,11 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
 
     private String getPrincipalNameFilter(String principalName) {
         List<String> loginAttrs = iLdapConfigMgr.getLoginAttributes();
+        principalName = principalName.replace("\"\"", "\""); // Unescape escaped XPath quotation marks
+        principalName = principalName.replace("''", "'"); // Unescape escaped XPath apostrophes
         principalName = Rdn.escapeValue(principalName);
+        principalName = principalName.replace("(", "\\("); // Escape paren for LDAP filter.
+        principalName = principalName.replace(")", "\\)"); // Escape paren for LDAP filter.
         StringBuffer filter = new StringBuffer();
         if (loginAttrs != null) {
             if (loginAttrs.size() > 1) {
@@ -3509,6 +3517,12 @@ public class LdapAdapter extends BaseRepository implements ConfiguredRepository 
             } else if (SchemaConstants.DATA_TYPE_LANG_TYPE.equals(dataType)) {
                 LangType langDO = (LangType) value;
                 ldapValue = langDO.getValue();
+            } else if (SchemaConstants.DATA_TYPE_BOOLEAN.equals(dataType)) {
+                /*
+                 * Some servers (OpenLDAP, Micorosoft Active Directory, among others) won't accept lower-case Boolean values
+                 * according to RFC 4517, section 3.3.3, where the ABNF is: Boolean = "TRUE" / "FALSE"
+                 */
+                ldapValue = value.toString().toUpperCase();
             } else {
                 ldapValue = value.toString();
             }

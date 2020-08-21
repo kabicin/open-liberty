@@ -17,6 +17,9 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
+import org.junit.rules.TestWatcher;
+import org.junit.runner.Description;
 import org.junit.runner.RunWith;
 
 import com.ibm.websphere.simplicity.ShrinkHelper;
@@ -35,6 +38,20 @@ import componenttest.topology.utils.FATServletClient;
 
 @RunWith(FATRunner.class)
 public class NoInterfaceBindingsTest extends FATServletClient {
+
+    @Rule
+    public TestWatcher watchman = new TestWatcher() {
+        @Override
+        protected void failed(Throwable e, Description description) {
+            try {
+                server.dumpServer("serverDump");
+            } catch (Exception e1) {
+                System.out.println("Failed to dump server");
+                e1.printStackTrace();
+            }
+        }
+    };
+
     @Server("com.ibm.ws.ejbcontainer.bindings.noInterface.fat.server")
     @TestServlets({ @TestServlet(servlet = NoInterfaceBindingSingletonServlet.class, contextRoot = "NoInterfaceBndWeb"),
                     @TestServlet(servlet = NoInterfaceBindingStatefulServlet.class, contextRoot = "NoInterfaceBndWeb"),
@@ -50,13 +67,13 @@ public class NoInterfaceBindingsTest extends FATServletClient {
         JavaArchive NoInterfaceBndBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndBean.jar", "com.ibm.ws.ejbcontainer.bindings.noInterface.bnd.ejb.");
         ShrinkHelper.addDirectory(NoInterfaceBndBean, "test-applications/NoInterfaceBndBean.jar/resources");
 
-        JavaArchive NoInterfaceBndCompBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndCompBean.jar", "no.packages.to.add.");
+        JavaArchive NoInterfaceBndCompBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndCompBean.jar", "com.ibm.ws.ejbcontainer.bindings.noInterface.bnd.ejb.");
         ShrinkHelper.addDirectory(NoInterfaceBndCompBean, "test-applications/NoInterfaceBndCompBean.jar/resources");
 
-        JavaArchive NoInterfaceBndCustomBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndCustomBean.jar", "no.packages.to.add.");
+        JavaArchive NoInterfaceBndCustomBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndCustomBean.jar", "com.ibm.ws.ejbcontainer.bindings.noInterface.bnd.ejb.");
         ShrinkHelper.addDirectory(NoInterfaceBndCustomBean, "test-applications/NoInterfaceBndCustomBean.jar/resources");
 
-        JavaArchive NoInterfaceBndSimpleBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndSimpleBean.jar", "no.packages.to.add.");
+        JavaArchive NoInterfaceBndSimpleBean = ShrinkHelper.buildJavaArchive("NoInterfaceBndSimpleBean.jar", "com.ibm.ws.ejbcontainer.bindings.noInterface.bnd.ejb.");
         ShrinkHelper.addDirectory(NoInterfaceBndSimpleBean, "test-applications/NoInterfaceBndSimpleBean.jar/resources");
 
         WebArchive NoInterfaceBndWeb = ShrinkHelper.buildDefaultApp("NoInterfaceBndWeb.war", "com.ibm.ws.ejbcontainer.bindings.noInterface.bnd.web.");

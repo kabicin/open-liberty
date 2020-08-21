@@ -26,6 +26,7 @@ import java.security.PrivilegedExceptionAction;
 import java.text.MessageFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -76,7 +77,7 @@ public class KernelBootstrap {
 
     /**
      * @param bootProps BootstrapProperties carry forward all of the parameters and
-     *                      options used to launch the kernel.
+     *            options used to launch the kernel.
      */
     public KernelBootstrap(BootstrapConfig bootProps) {
         this.bootProps = bootProps;
@@ -439,42 +440,23 @@ public class KernelBootstrap {
         if (bootProps.get(BootstrapConstants.JAVA_2_SECURITY_PROPERTY) != null) {
 
             NameBasedLocalBundleRepository repo = new NameBasedLocalBundleRepository(bootProps.getInstallRoot());
-            urlList.add(getJarFileFromBundleName(repo, "com.ibm.ws.org.eclipse.equinox.region", "[1.0,1.0.100)"));
-            // the following three jar files are for serialfilter which are loaded by URLClassloader by bootstrap agent.
-            urlList.add(getJarFileFromBundleName(repo, "com.ibm.ws.kernel.instrument.serialfilter", "[1.0,1.0.100)"));
-            addJarFileIfExist(urlList, bootProps.getInstallRoot() + "/bin/tools/ws-javaagent.jar");
-            addJarFileIfExist(urlList, bootProps.getInstallRoot() + "/lib/bootstrap-agent.jar");
+            File bestMatchFile = repo.selectBundle("com.ibm.ws.org.eclipse.equinox.region",
+                                                   VersionUtility.stringToVersionRange("[1.0,1.0.100)"));
+            if (bestMatchFile == null) {
+                throw new LaunchException("Could not find bundle for " + "com.ibm.ws.org.eclipse.equinox.region"
+                                          + ".", BootstrapConstants.messages.getString("error.missingBundleException"));
+            } else {
+                // Add to the list of boot jars...
+                try {
+                    urlList.add(bestMatchFile.toURI().toURL());
+                } catch (MalformedURLException e) {
+                    throw new LaunchException("Failure to set the default Security Manager due to exception ", BootstrapConstants.messages.getString("error.set.securitymanager"), e);
+                }
+            }
             Policy wlpPolicy = new WLPDynamicPolicy(Policy.getPolicy(), urlList);
             Policy.setPolicy(wlpPolicy);
         }
 
-    }
-
-    private static URL getJarFileFromBundleName(NameBasedLocalBundleRepository repo, String bundleName, String versionRange) {
-        File bestMatchFile = repo.selectBundle(bundleName,
-                                               VersionUtility.stringToVersionRange(versionRange));
-        if (bestMatchFile == null) {
-            throw new LaunchException("Could not find bundle for " + bundleName
-                                      + ".", BootstrapConstants.messages.getString("error.missingBundleException"));
-        } else {
-            // Add to the list of boot jars...
-            try {
-                return bestMatchFile.toURI().toURL();
-            } catch (MalformedURLException e) {
-                throw new LaunchException("Failure to set the default Security Manager due to exception ", BootstrapConstants.messages.getString("error.set.securitymanager"), e);
-            }
-        }
-    }
-
-    private static void addJarFileIfExist(List<URL> urlList, String name) {
-        try {
-            File file = new File(name);
-            if (file.exists()) {
-                urlList.add(file.toURI().toURL());
-            }
-        } catch (MalformedURLException e) {
-            throw new LaunchException("Failure to set the default Security Manager due to exception ", BootstrapConstants.messages.getString("error.set.securitymanager"), e);
-        }
     }
 
     /**
@@ -507,7 +489,11 @@ public class KernelBootstrap {
         final String launchString;
         final String versionString;
 
-        String consoleFormat = System.getenv("WLP_LOGGING_CONSOLE_FORMAT");
+        String bsConsoleFormat = bootProps.get("com.ibm.ws.logging.console.format");
+        String envConsoleFormat = System.getenv("WLP_LOGGING_CONSOLE_FORMAT");
+
+        //boostrap format should take precedence
+        String consoleFormat = bsConsoleFormat != null ? bsConsoleFormat : envConsoleFormat;
 
         if (productInfo == null) {
             // RARE/CORNER-CASE: All bets are off, we don't have product info anyway... :(
@@ -542,25 +528,59 @@ public class KernelBootstrap {
         String serverHostName = getServerHostName();
         String datetime = getDatetime();
         String sequenceNumber = getSequenceNumber();
-        //construct json header
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"type\":\"liberty_message\"");
-        sb.append(",\"host\":\"");
-        sb = jsonEscape(sb, serverHostName);
-        sb.append("\",\"ibm_userDir\":\"");
-        sb = jsonEscape(sb, wlpUserDir);
-        sb.append("\",\"ibm_serverName\":\"");
-        sb = jsonEscape(sb, serverName);
-        sb.append("\",\"message\":\"");
-        sb = jsonEscape(sb, consoleLogHeader);
-        sb.append("\",\"ibm_datetime\":\"");
-        sb = jsonEscape(sb, datetime);
-        sb.append("\",\"ibm_sequence\":\"");
-        sb = jsonEscape(sb, sequenceNumber);
-        sb.append("\"}");
 
-        return sb.toString();
+        //header field names and values
+        List<String> headerFieldNames = new ArrayList<>(Arrays.asList("type", "host", "ibm_userDir", "ibm_serverName", "message", "ibm_datetime", "ibm_sequence"));
+        final String[] headerFieldValues = { "liberty_message", serverHostName, wlpUserDir, serverName, consoleLogHeader, datetime, sequenceNumber };
 
+        final String OMIT_FIELDS_STRING = "@@@OMIT@@@";
+
+        //bootstrap fieldMappings should take precedence
+        String bsFieldMappings = bootProps.get("com.ibm.ws.logging.json.field.mappings");
+        String envFieldMappings = System.getenv("WLP_LOGGING_JSON_FIELD_MAPPINGS");
+        String fieldMappings = bsFieldMappings != null ? bsFieldMappings : envFieldMappings;
+
+        if (fieldMappings != null && !fieldMappings.isEmpty() && fieldMappings != "") {
+            String[] keyValuePairs = fieldMappings.split(",");
+            for (String pair : keyValuePairs) {
+                pair = pair.trim();
+                if (pair.endsWith(":"))
+                    pair = pair + OMIT_FIELDS_STRING;
+
+                String[] entry = pair.split(":");
+                entry[0] = entry[0].trim();
+
+                if (entry.length == 2) {
+                    entry[1] = entry[1].trim();
+                    if (headerFieldNames.contains(entry[0]))
+                        headerFieldNames.set(headerFieldNames.indexOf(entry[0]), entry[1]);
+
+                } else if (entry.length == 3 && entry[0].equals("message")) {
+                    entry[1] = entry[1].trim();
+                    entry[2] = entry[2].trim();
+                    if (headerFieldNames.contains(entry[1]))
+                        headerFieldNames.set(headerFieldNames.indexOf(entry[1]), entry[2]);
+                }
+            }
+        }
+
+        StringBuilder jsonHeader = new StringBuilder("{");
+        int currentValue = 0;
+        Boolean isFirstField = true;
+
+        for (String name : headerFieldNames) {
+            if (!name.equals(OMIT_FIELDS_STRING)) {
+                if (!isFirstField)
+                    jsonHeader.append(",");
+                jsonHeader.append("\"" + name + "\":\"");
+                jsonHeader = jsonEscape(jsonHeader, headerFieldValues[currentValue]);
+                jsonHeader.append("\"");
+                isFirstField = false;
+            }
+            currentValue++;
+        }
+
+        return jsonHeader.append("}").toString();
     }
 
     private static String getSequenceNumber() {

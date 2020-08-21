@@ -24,6 +24,7 @@ import java.net.URL;
 import java.security.AccessController;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -155,7 +156,7 @@ public class FileUtils {
      * Recursively copy the files from one dir to the other.
      *
      * @param from The directory to copy from, must exist.
-     * @param to The directory to copy to, must exist, must be empty.
+     * @param to   The directory to copy to, must exist, must be empty.
      * @throws IOException
      * @throws FileNotFoundException
      */
@@ -556,11 +557,11 @@ public class FileUtils {
      * Recursively delete directory: used to clean up for clean start.
      *
      * @param fileToRemove
-     *            Name of file/directory to delete. If the File is a directory,
-     *            all sub-directories and files will also be deleted except for
-     *            the server lock and server running file.
+     *                         Name of file/directory to delete. If the File is a directory,
+     *                         all sub-directories and files will also be deleted except for
+     *                         the server lock and server running file.
      *
-     *            This method will return false if the file can not be read or deleted.
+     *                         This method will return false if the file can not be read or deleted.
      *
      * @return true if the clean succeeded, false otherwise
      */
@@ -615,14 +616,19 @@ public class FileUtils {
             for (File file : files) {
                 if (file.isDirectory()) {
                     success |= recursiveClean(file);
-                } else if ((file.getName().equals(BootstrapConstants.S_LOCK_FILE) &&
-                            fileToRemove.getName().equals(BootstrapConstants.LOC_AREA_NAME_WORKING))
-                           ||
-                           ((fileToRemove.getName().equals(BootstrapConstants.LOC_AREA_NAME_WORKING))) &&
-                              (file.getName().equals(BootstrapConstants.SERVER_RUNNING_FILE))) {
-                    // skip/preserve workarea/.sLock and workarea/.sRunning files
                 } else {
-                    success |= file.delete();
+                    String candidate = file.getName();
+                    String candidateParent = fileToRemove.getName();
+                    if ((BootstrapConstants.S_LOCK_FILE.equals(candidate) ||
+                         BootstrapConstants.SERVER_RUNNING_FILE.equals(candidate))
+                        &&
+                        (BootstrapConstants.LOC_AREA_NAME_WORKING.equals(candidateParent) ||
+                         BootstrapConstants.LOC_AREA_NAME_WORKING_UTILS.equals(candidateParent))) {
+                        // skip/preserve workarea/.sLock and workarea/.sRunning files, including those
+                        // in embedded server workarea
+                    } else {
+                        success |= file.delete();
+                    }
                 }
             }
             files = fileToRemove.listFiles();
@@ -653,7 +659,7 @@ public class FileUtils {
      * A method that translates a "file:" URL into a File.
      *
      * @param url
-     *            the "file:" URL to convert into a file name
+     *                the "file:" URL to convert into a file name
      * @return file derived from URL
      */
     public static File getFile(URL url) {
@@ -727,5 +733,11 @@ public class FileUtils {
             return null;
         }
 
+    }
+
+    @Trivial
+    public static boolean isWSL() {
+        return System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("linux") &&
+               System.getProperty("os.version").toLowerCase(Locale.ENGLISH).contains("microsoft");
     }
 }

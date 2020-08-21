@@ -17,7 +17,7 @@ Subsystem-Name: MicroProfile Health 1.0
  com.ibm.websphere.appserver.json-1.0, \
  com.ibm.websphere.appserver.servlet-3.1; ibm.tolerates:=4.0, \
  com.ibm.wsspi.appserver.webBundle-1.0 
--bundles=com.ibm.ws.require.java8, \
+-bundles=\
  com.ibm.websphere.org.eclipse.microprofile.health.1.0; location:="dev/api/stable/,lib/"; mavenCoordinates="org.eclipse.microprofile.health:microprofile-health-api:1.0", \
  com.ibm.websphere.jsonsupport, \
  com.ibm.ws.classloader.context, \
@@ -25,3 +25,4 @@ Subsystem-Name: MicroProfile Health 1.0
  com.ibm.ws.org.joda.time.1.6.2
 kind=ga
 edition=core
+WLP-Activation-Type: parallel

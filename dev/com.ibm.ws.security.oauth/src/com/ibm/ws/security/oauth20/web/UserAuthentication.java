@@ -57,7 +57,6 @@ import com.ibm.ws.webcontainer.security.WebAuthenticator;
 import com.ibm.ws.webcontainer.security.WebAuthenticatorFactory;
 import com.ibm.ws.webcontainer.security.WebAuthenticatorProxy;
 import com.ibm.ws.webcontainer.security.WebProviderAuthenticatorProxy;
-import com.ibm.ws.webcontainer.security.extended.WebAuthenticatorFactoryExtended;
 import com.ibm.ws.webcontainer.security.internal.CertificateLoginAuthenticator;
 import com.ibm.wsspi.kernel.service.utils.AtomicServiceReference;
 
@@ -169,7 +168,7 @@ public class UserAuthentication {
                 return processPostAuthentication(request, response, requiredRole, al, authResult);
             } else if (authResult.getStatus() == AuthResult.FAILURE || authResult.getStatus() == AuthResult.SEND_401) {
                 setAuthTypeAndPrintError(provider, al, authResult, authnType);
-                boolean bOAuth = request.getAttribute("OidcRequest") == null;
+                boolean bOAuth = request.getAttribute(OAuth20Constants.OIDC_REQUEST_OBJECT_ATTR_NAME) == null;
                 if (bOAuth || !prompt.hasNone()) {
                     response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
                     return new OAuthResultImpl(OAuthResult.STATUS_FAILED, al,
@@ -271,9 +270,9 @@ public class UserAuthentication {
         java.util.HashMap<String, Object> props = new java.util.HashMap<String, Object>();
         props.put("authType", "com.ibm.ws.security.spnego");
         WebAuthenticatorFactory webAuthenticatorFactory = WebAppSecurityCollaboratorImpl.getWebAuthenticatorFactory();
-        if (webAuthenticatorFactory != null && webAuthenticatorFactory instanceof WebAuthenticatorFactoryExtended) {
+        if (webAuthenticatorFactory != null) {
             try {
-                WebProviderAuthenticatorProxy webProviderAuthenticatorProxy = ((WebAuthenticatorFactoryExtended) webAuthenticatorFactory).getWebProviderAuthenticatorProxy();
+                WebProviderAuthenticatorProxy webProviderAuthenticatorProxy = webAuthenticatorFactory.getWebProviderAuthenticatorProxy();
                 if (webProviderAuthenticatorProxy != null) {
                     authResult = webProviderAuthenticatorProxy.authenticate(request, response, props);
                 }
@@ -444,7 +443,7 @@ public class UserAuthentication {
                 authResult = authenticator.authenticate(request, response, null);
             } catch (Exception e) {
                 if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                    Tr.debug(tc, "The direct login of http request failed because of exception: " + e.getMessage());
+                    Tr.debug(tc, "The direct login of http request failed because of exception: " + e);
                 }
                 authResult = new AuthenticationResult(AuthResult.FAILURE, e.getMessage());
             }
@@ -547,7 +546,7 @@ public class UserAuthentication {
         response.addCookie(c);
 
         if (tc.isDebugEnabled()) {
-            Tr.debug(tc, "_SSO OP redirecting to login page [" + loginURL +"]");
+            Tr.debug(tc, "_SSO OP redirecting to login page [" + loginURL + "]");
         }
         request.getSession(true).setAttribute(Constants.ATTR_AFTERLOGIN, Boolean.TRUE);
         response.sendRedirect(loginURL);

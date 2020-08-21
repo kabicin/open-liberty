@@ -36,7 +36,6 @@ import com.ibm.ws.security.javaeesec.fat_helper.LocalLdapServer;
 import com.ibm.ws.security.javaeesec.fat_helper.WCApplicationHelper;
 
 import componenttest.annotation.ExpectedFFDC;
-import componenttest.annotation.MinimumJavaLevel;
 import componenttest.custom.junit.runner.FATRunner;
 import componenttest.custom.junit.runner.Mode;
 import componenttest.custom.junit.runner.Mode.TestMode;
@@ -46,7 +45,6 @@ import componenttest.topology.impl.LibertyServerFactory;
 /**
  *
  */
-@MinimumJavaLevel(javaLevel = 8)
 @RunWith(FATRunner.class)
 @Mode(TestMode.FULL)
 public class FeatureTest extends JavaEESecTestBase {
@@ -228,12 +226,12 @@ public class FeatureTest extends JavaEESecTestBase {
         Log.info(logClass, getCurrentTestName(), "-----Accessing Application to test scenarios...");
         startServer(APP_SEC_2_XML_NAME, EJB_APP_NAME_noPermission);
         assertNotNull("Expected class not found error",
-                      myServer.waitForStringInLog("CWNEN0049W: Resource annotations on the methods of the web.ejb.jar.bean..*"));
+                      myServer.waitForStringInLog("CWNEN00\\d\\dW: Resource annotations on the methods of the web.ejb.jar.bean..*"));
         assertNotNull("Application was able not able to start",
                       myServer.waitForStringInLog("CWWKZ0002E: An exception occurred while starting the application securityejbinwar3."));
 
         myServer.removeInstalledAppForValidation(EJB_APP_NAME_noPermission);
-        myServer.stopServer("CWNEN0049W:*", "CWWKZ0106E:*", "CWWKZ0002E:*");
+        myServer.stopServer("CWNEN0049W:*", "CWNEN0050W:*", "CWWKZ0106E:*", "CWWKZ0002E:*");
         Log.info(logClass, getCurrentTestName(), "-----Exiting " + getCurrentTestName());
     }
 
@@ -279,12 +277,12 @@ public class FeatureTest extends JavaEESecTestBase {
         Log.info(logClass, getCurrentTestName(), "-----Accessing Application to test scenarios...");
         startServer(APP_SEC_1_XML_NAME, EJB_APP_NAME_noPermission);
         assertNotNull("Expected class not found error",
-                      myServer.waitForStringInLog("CWNEN0049W: Resource annotations on the methods of the web.ejb.jar.bean..*"));
+                      myServer.waitForStringInLog("CWNEN00\\d\\dW: Resource annotations on the methods of the web.ejb.jar.bean..*"));
         assertNotNull("Application was able not able to start",
                       myServer.waitForStringInLog("CWWKZ0002E: An exception occurred while starting the application securityejbinwar3."));
 
         myServer.removeInstalledAppForValidation(EJB_APP_NAME_noPermission);
-        myServer.stopServer("CWNEN0049W:*", "CWWKZ0106E:*", "CWWKZ0002E:*");
+        myServer.stopServer("CWNEN0049W:*", "CWNEN0050W:*", "CWWKZ0106E:*", "CWWKZ0002E:*");
         Log.info(logClass, getCurrentTestName(), "-----Exiting " + getCurrentTestName());
     }
 

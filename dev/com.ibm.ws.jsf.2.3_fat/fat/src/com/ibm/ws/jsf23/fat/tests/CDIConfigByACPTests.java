@@ -21,7 +21,6 @@ import org.junit.runner.RunWith;
 import com.ibm.websphere.simplicity.ShrinkHelper;
 import com.ibm.ws.jsf23.fat.CDITestBase;
 
-import componenttest.annotation.MinimumJavaLevel;
 import componenttest.annotation.Server;
 import componenttest.custom.junit.runner.FATRunner;
 import componenttest.custom.junit.runner.Mode;
@@ -35,7 +34,6 @@ import componenttest.topology.impl.LibertyServer;
  * We're extending CDITestBase, which has common test code.
  */
 @Mode(TestMode.FULL)
-@MinimumJavaLevel(javaLevel = 8)
 @RunWith(FATRunner.class)
 public class CDIConfigByACPTests extends CDITestBase {
 
@@ -81,9 +79,6 @@ public class CDIConfigByACPTests extends CDITestBase {
      * Field and Method injection, but no Constructor injection.
      * Also tested are use of request and session scope and use of qualifiers.
      *
-     * We have a single source location of test-application-common for all application classes. build-test.xml contains the logic that
-     * compiles this source directory and copies half the managed classes into the app's jar file and half into the app's war files.
-     *
      * @throws Exception. Content of the response should show if a specific injection failed.
      *
      */
@@ -96,9 +91,6 @@ public class CDIConfigByACPTests extends CDITestBase {
      * Test to ensure that CDI 2.0 injection works for a custom EL Resolver
      * Field and Method injection, but no Constructor injection.
      * Also tested are use of request and session scope and use of qualifiers.
-     *
-     * We have a single source location of test-application-common for all application classes. build-test.xml contains the logic that
-     * compiles this source directory and copies half the managed classes into the app's jar file and half into the app's war files.
      *
      * @throws Exception. Content of the response should show if a specific injection failed.
      *
@@ -113,9 +105,6 @@ public class CDIConfigByACPTests extends CDITestBase {
      *
      * Would like to do something more than look for message in logs, a future improvement.
      *
-     * We have a single source in test-application-common for all application classes. build-test.xml contains the logic that
-     * compiles this source directory and splits the copying managec classes the class files into app's jar/war files.
-     *
      * @throws Exception
      */
     @Test
@@ -128,9 +117,6 @@ public class CDIConfigByACPTests extends CDITestBase {
      * Test method and field injection on custom state manager. No intercepter or constructor tests on this.
      *
      * Would like to do something more than look for message in logs, a future improvement.
-     *
-     * We have a single source in test-application-common for all application classes. build-test.xml contains the logic that
-     * compiles this source directory and splits the copying managec classes the class files into app's jar/war files.
      *
      * @throws Exception
      */
@@ -147,9 +133,6 @@ public class CDIConfigByACPTests extends CDITestBase {
      *
      * Tests also use app scope as
      * request/session are not available to these managed classes that I can tell.
-     *
-     * We have a single source location of test-application-common for all application classes. build-test.xml contains the logic that
-     * compiles this source directory and copies half the managed classes into the app's jar file and half into the app's war files.
      *
      * @throws Exception
      */

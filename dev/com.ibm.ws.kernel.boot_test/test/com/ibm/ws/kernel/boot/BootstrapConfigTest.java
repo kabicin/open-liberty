@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2013 IBM Corporation and others.
+ * Copyright (c) 2010, 2019 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -56,9 +56,6 @@ import test.common.SharedOutputManager;
 import test.shared.Constants;
 import test.shared.TestUtils;
 
-/**
- *
- */
 public class BootstrapConfigTest {
     static SharedOutputManager outputMgr = SharedOutputManager.getInstance();
     static final File defaultServer = new File(Constants.TEST_TMP_ROOT, "defaultServer");
@@ -311,6 +308,11 @@ public class BootstrapConfigTest {
             assertEquals("E: configDir should be a child of the processesRoot", bc.processesRoot, bc.configDir.getParentFile());
             assertSame("E: outputRoot should be same as processesRoot", bc.processesRoot, bc.outputRoot);
             assertSame("E: outputDir should be same as configDir", bc.configDir, bc.outputDir);
+
+            // Embedded workarea for utilities
+            bc = new TestBootstrapConfig();
+            bc.findLocations(testName.getMethodName(), null, null, null, null, BootstrapConstants.LOC_AREA_NAME_WORKING_UTILS);
+            assertTrue("F: workarea should be child of outputDir/workarea: ", new File(bc.outputDir, "workarea").equals(bc.workarea.getParentFile()));
 
         } finally {
             TestUtils.cleanTempFiles(test1);
@@ -716,8 +718,6 @@ public class BootstrapConfigTest {
             assertTrue("Server env file should contain WLP_MY_ENV_VAR=true as the first line", "WLP_MY_ENV_VAR=true".equals(customAdditionLine));
             assertTrue("Server env file should contain keystore_password=liberty as the second line but was: " + keystorePasswordLine,
                        "keystore_password=liberty".equals(keystorePasswordLine));
-            assertTrue("Server env file should contain WLP_SKIP_MAXPERMSIZE=true as the third line", "WLP_SKIP_MAXPERMSIZE=true".equals(maxPermSizeLine));
-
         } finally {
             TestUtils.cleanTempFiles(newServerDir.getParentFile()); // servers dir
         }
@@ -770,8 +770,6 @@ public class BootstrapConfigTest {
                        keystorePasswordLine.startsWith("keystore_password="));
             assertEquals("Generated keystore password should be 23 chars long: " + keystorePasswordLine, 23,
                          keystorePasswordLine.substring("keystore_password=".length()).length());
-            assertTrue("Server env file should contain WLP_SKIP_MAXPERMSIZE=true as the third line", "WLP_SKIP_MAXPERMSIZE=true".equals(maxPermSizeLine));
-
         } finally {
             TestUtils.cleanTempFiles(newServerDir.getParentFile()); // servers dir
         }
@@ -900,13 +898,15 @@ public class BootstrapConfigTest {
     }
 
     protected class TestBootstrapConfig extends BootstrapConfig {
-        TestBootstrapConfig() {}
+        TestBootstrapConfig() {
+        }
 
         TestBootstrapConfig(Map<String, String> initProps) {
             super.initProps = initProps;
         }
 
         @Override
-        protected void verifyProcess(VerifyServer verify, LaunchArguments args) throws LaunchException {}
+        protected void verifyProcess(VerifyServer verify, LaunchArguments args) throws LaunchException {
+        }
     }
 }

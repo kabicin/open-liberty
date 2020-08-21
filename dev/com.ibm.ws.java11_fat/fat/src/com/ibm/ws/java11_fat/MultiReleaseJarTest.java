@@ -20,7 +20,6 @@ import org.junit.runner.RunWith;
 
 import com.ibm.websphere.simplicity.ShrinkHelper;
 
-import componenttest.annotation.MinimumJavaLevel;
 import componenttest.annotation.Server;
 import componenttest.annotation.TestServlet;
 import componenttest.annotation.TestServlets;
@@ -31,7 +30,6 @@ import componenttest.topology.utils.FATServletClient;
 import java11.multirelease.web.MultiReleaseJarTestServlet;
 
 @RunWith(FATRunner.class)
-@MinimumJavaLevel(javaLevel = 8)
 public class MultiReleaseJarTest extends FATServletClient {
 
     private static final String REGULAR_APP = "multiReleaseApp";
@@ -55,6 +53,7 @@ public class MultiReleaseJarTest extends FATServletClient {
         WebArchive mrJarInWarApp = ShrinkHelper.buildDefaultApp(REGULAR_APP, "java11.multirelease.web")
                         .addAsLibrary(new File("publish/servers/server_MultiReleaseJarTest/lib/multiRelease.jar"));
         ShrinkHelper.exportAppToServer(server, mrJarInWarApp);
+        server.addInstalledAppForValidation(REGULAR_APP);
 
         // This app includes multiRelease.jar as a shared library via server.xml
         ShrinkHelper.defaultApp(server, SHARED_LIB_APP, "java11.multirelease.web");
@@ -62,6 +61,9 @@ public class MultiReleaseJarTest extends FATServletClient {
         server.startServer();
 
         EXPECTED_JAVA = JavaInfo.forServer(server).majorVersion();
+        if (EXPECTED_JAVA > 17)
+            // don't bother updating past Java 17, we get the point after that many releases
+            EXPECTED_JAVA = 17;
     }
 
     @AfterClass
@@ -71,12 +73,14 @@ public class MultiReleaseJarTest extends FATServletClient {
 
     @Test
     public void testOverriddenClass_RegApp() throws Exception {
+
         FATServletClient.runTest(server, REGULAR_APP + "/MultiReleaseJarTestServlet",
                                  "testOverriddenClass&" + MultiReleaseJarTestServlet.EXPECTED_JAVA_LEVEL + '=' + EXPECTED_JAVA);
     }
 
     @Test
     public void testOverriddenClass_SharedLibApp() throws Exception {
+
         FATServletClient.runTest(server, SHARED_LIB_APP + "/MultiReleaseJarTestServlet",
                                  "testOverriddenClass&" + MultiReleaseJarTestServlet.EXPECTED_JAVA_LEVEL + '=' + EXPECTED_JAVA);
     }

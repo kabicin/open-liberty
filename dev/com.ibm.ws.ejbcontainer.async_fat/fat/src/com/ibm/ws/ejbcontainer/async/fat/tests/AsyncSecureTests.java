@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2019, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -51,14 +51,6 @@ public class AsyncSecureTests extends AbstractTest {
     public static void beforeClass() throws Exception {
         // Use ShrinkHelper to build the Ears & Wars
 
-        //#################### InitTxRecoveryLogApp.ear (Automatically initializes transaction recovery logs)
-        JavaArchive InitTxRecoveryLogEJBJar = ShrinkHelper.buildJavaArchive("InitTxRecoveryLogEJB.jar", "com.ibm.ws.ejbcontainer.init.recovery.ejb.");
-
-        EnterpriseArchive InitTxRecoveryLogApp = ShrinkWrap.create(EnterpriseArchive.class, "InitTxRecoveryLogApp.ear");
-        InitTxRecoveryLogApp.addAsModule(InitTxRecoveryLogEJBJar);
-
-        ShrinkHelper.exportDropinAppToServer(server, InitTxRecoveryLogApp);
-
         //#################### AsyncSecureTestApp.ear
         JavaArchive AsyncSecureTestEJB = ShrinkHelper.buildJavaArchive("AsyncSecureTestEJB.jar", "com.ibm.ws.ejbcontainer.async.fat.secure.ejb.");
         WebArchive AsyncSecureTestWeb = ShrinkHelper.buildDefaultApp("AsyncSecureTestWeb.war", "com.ibm.ws.ejbcontainer.async.fat.secure.web.");
@@ -72,8 +64,19 @@ public class AsyncSecureTests extends AbstractTest {
         // Finally, start server
         server.startServer();
 
-        assertNotNull("Security service did not report it was ready", server.waitForStringInLog("CWWKS0008I"));
-        assertNotNull("LTPA configuration should report it is ready", server.waitForStringInLog("CWWKS4105I"));
+        // verify the appSecurity-2.0 feature is ready
+        assertNotNull("Security service did not report it was ready", server.waitForStringInLogUsingMark("CWWKS0008I"));
+        assertNotNull("LTPA configuration did not report it was ready", server.waitForStringInLogUsingMark("CWWKS4105I"));
+
+        //#################### InitTxRecoveryLogApp.ear (Automatically initializes transaction recovery logs)
+        JavaArchive InitTxRecoveryLogEJBJar = ShrinkHelper.buildJavaArchive("InitTxRecoveryLogEJB.jar", "com.ibm.ws.ejbcontainer.init.recovery.ejb.");
+
+        EnterpriseArchive InitTxRecoveryLogApp = ShrinkWrap.create(EnterpriseArchive.class, "InitTxRecoveryLogApp.ear");
+        InitTxRecoveryLogApp.addAsModule(InitTxRecoveryLogEJBJar);
+
+        // Only after the server has started and appSecurity-2.0 feature is ready,
+        // then allow the @Startup InitTxRecoveryLog bean to start.
+        ShrinkHelper.exportDropinAppToServer(server, InitTxRecoveryLogApp);
     }
 
     @AfterClass

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2014, 2019 IBM Corporation and others.
+ * Copyright (c) 2014, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -189,7 +189,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(authenticationService).authenticate(with(equal(thisAuthMech)), with(matchingAuthenticationData(authenticationData)), with(equal((Subject) null)));
@@ -235,14 +235,14 @@ public class UserAuthenticationTest {
                     one(request).getUserPrincipal();
                     will(returnValue(null));
                     one(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     one(provider).isCertAuthentication();
                     will(returnValue(true));
                     one(serviceReference).getService();
                     will(returnValue(securityService));
                     one(securityService).getAuthenticationService();
                     will(returnValue(authenticationService));
-                    one(config).createSSOCookieHelper();
+                    allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     one(authenticationService).authenticate(with(equal(thisAuthMech)), with(matchingAuthenticationData(authData)), with(equal((Subject) null)));
                     will(returnValue(subject));
@@ -295,11 +295,13 @@ public class UserAuthenticationTest {
                     allowing(request).getUserPrincipal();
                     will(returnValue(null));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(provider).isCertAuthentication();
                     will(returnValue(false));
                     allowing(provider).isAllowCertAuthentication();
                     will(returnValue(false));
+                    allowing(config).getSameSiteCookie();
+                    will(returnValue("Disabled"));
                 }
             });
             sendForLoginExpectations(requestUri, contextPath, loginUrl);
@@ -344,14 +346,14 @@ public class UserAuthenticationTest {
                     one(request).getUserPrincipal();
                     will(returnValue(null));
                     one(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     one(provider).isCertAuthentication();
                     will(returnValue(false));
                     one(serviceReference).getService();
                     will(returnValue(securityService));
                     one(securityService).getAuthenticationService();
                     will(returnValue(authenticationService));
-                    one(config).createSSOCookieHelper();
+                    allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     one(authenticationService).authenticate(with(equal(thisAuthMech)), with(matchingAuthenticationData(authData)), with(equal((Subject) null)));
                     will(returnValue(subject));
@@ -432,6 +434,8 @@ public class UserAuthenticationTest {
                     will(returnValue(null));
                     one(request).getParameter(ATTR_PROMPT);
                     will(returnValue(null));
+                    allowing(config).getSameSiteCookie();
+                    will(returnValue("Disabled"));
                 }
             });
             sendForLoginExpectations(requestUri, contextPath, loginUrl);
@@ -472,6 +476,8 @@ public class UserAuthenticationTest {
                     one(request).getUserPrincipal();
                     will(returnValue(ppl));
                     one(request).logout();
+                    allowing(config).getSameSiteCookie();
+                    will(returnValue("Disabled"));
                 }
             });
             sendForLoginExpectations(requestUri, contextPath, loginUrl);
@@ -532,7 +538,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(false));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -596,7 +602,7 @@ public class UserAuthenticationTest {
                     allowing(config).getDisplayAuthenticationRealm();
                     will(returnValue(false));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -671,7 +677,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(authenticationService).authenticate(with(equal(thisAuthMech)), with(matchingAuthenticationData(authenticationData)), with(equal((Subject) null)));
@@ -741,7 +747,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -813,7 +819,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(authenticationService).authenticate(with(equal(thisAuthMech)), with(matchingAuthenticationData(authenticationData)), with(equal((Subject) null)));
@@ -888,7 +894,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(false));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -964,7 +970,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(false));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -1029,12 +1035,12 @@ public class UserAuthenticationTest {
                     allowing(config).getDisplayAuthenticationRealm();
                     will(returnValue(false));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
                     will(returnValue(new ReferrerURLCookieHandler(config)));
-                    one(request).getAttribute("OidcRequest");
+                    one(request).getAttribute(OAuth20Constants.OIDC_REQUEST_OBJECT_ATTR_NAME);
                     will(returnValue(null));
                     one(response).sendError(HttpServletResponse.SC_UNAUTHORIZED);
                 }
@@ -1078,6 +1084,8 @@ public class UserAuthenticationTest {
                     will(returnValue(null));
                     allowing(provider).isAllowSpnegoAuthentication();
                     will(returnValue(false));
+                    allowing(config).getSameSiteCookie();
+                    will(returnValue("Disabled"));
                 }
             });
             sendForLoginExpectations(requestUri, contextPath, loginUrl);
@@ -1118,6 +1126,8 @@ public class UserAuthenticationTest {
                     will(returnValue(Constants.PROMPT_LOGIN + " " + Constants.PROMPT_CONSENT));
                     allowing(provider).isAllowSpnegoAuthentication();
                     will(returnValue(false));
+                    allowing(config).getSameSiteCookie();
+                    will(returnValue("Disabled"));
                 }
             });
             sendForLoginExpectations(requestUri, contextPath, loginUrl);
@@ -1173,7 +1183,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -1236,7 +1246,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();
@@ -1300,7 +1310,7 @@ public class UserAuthenticationTest {
                     allowing(config).getSSORequiresSSL();
                     will(returnValue(true));
                     allowing(config).createWebAuthenticatorProxy();
-                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null)));
+                    will(returnValue(new WebAuthenticatorProxy(config, null, serviceReference, null, null)));
                     allowing(config).createSSOCookieHelper();
                     will(returnValue(new SSOCookieHelperImpl(config)));
                     allowing(config).createReferrerURLCookieHandler();

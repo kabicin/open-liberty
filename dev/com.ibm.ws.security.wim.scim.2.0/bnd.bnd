@@ -8,8 +8,6 @@
 # Contributors:
 #     IBM Corporation - initial API and implementation
 #*******************************************************************************
-# For information on bnd syntax, see http://was.pok.ibm.com/xwiki/bin/view/Liberty/UsingBnd
-
 -include= ~../cnf/resources/bnd/bundle.props
 bVersion=1.0
 
@@ -18,9 +16,6 @@ Bundle-SymbolicName: com.ibm.ws.security.wim.scim.2.0
 Bundle-Description: SCIM 2.0; version=${bVersion}
 
 # Require Java 8
-Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
-javac.source: 1.8
-javac.target: 1.8
 
 #
 # Eventually can move the websphere classes to an API project.

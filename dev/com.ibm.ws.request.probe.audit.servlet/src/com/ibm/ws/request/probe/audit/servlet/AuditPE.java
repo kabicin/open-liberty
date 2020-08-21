@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2019 IBM Corporation and others.
+ * Copyright (c) 2016, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -62,8 +62,9 @@ import com.ibm.ws.security.audit.event.JMXMBeanEvent;
 import com.ibm.ws.security.audit.event.JMXMBeanRegisterEvent;
 import com.ibm.ws.security.audit.event.JMXNotificationEvent;
 import com.ibm.ws.security.audit.event.MemberManagementEvent;
-import com.ibm.ws.security.audit.event.SAFAuthorizationEvent;
+import com.ibm.ws.security.audit.event.RESTAuthorizationEvent;
 import com.ibm.ws.security.audit.event.SAFAuthorizationDetailsEvent;
+import com.ibm.ws.security.audit.event.SAFAuthorizationEvent;
 //import com.ibm.ws.security.audit.utils.AuditConstants;
 import com.ibm.ws.webcontainer.security.AuthenticationResult;
 import com.ibm.ws.webcontainer.security.WebRequest;
@@ -243,6 +244,9 @@ public class AuditPE implements ProbeExtension {
 					break;
 				case SECURITY_SAF_AUTHZ:
 					auditEventSafAuth(methodParams);
+					break;
+				case SECURITY_REST_HANDLER_AUTHZ:
+					auditEventRESTAuthz(methodParams);
 					break;
 				default:
 					// TODO: emit error message
@@ -714,6 +718,21 @@ public class AuditPE implements ProbeExtension {
 		}
 	}
 
+	private void auditEventRESTAuthz(Object[] methodParams) {
+
+		Object[] varargs = (Object[]) methodParams[1];
+		Object req = varargs[0];
+		Object response = varargs[1];
+		int statusCode = (Integer) varargs[2];
+		if (auditServiceRef.getService() != null && auditServiceRef.getService()
+				.isAuditRequired(AuditConstants.SECURITY_REST_HANDLER_AUTHZ,
+						statusCode == HttpServletResponse.SC_OK ? AuditConstants.SUCCESS : AuditConstants.FAILURE)) {
+			RESTAuthorizationEvent av = new RESTAuthorizationEvent(req, response);
+			auditServiceRef.getService().sendEvent(av);
+		}
+
+	}
+
     private void auditEventSafAuth(Object[] methodParams) {
         Object[] varargs = (Object[]) methodParams[1];
 
@@ -728,8 +747,27 @@ public class AuditPE implements ProbeExtension {
         String applid = (String) varargs[8];
         String accessLevel = (String) varargs[9];
         String errorMessage = (String) varargs[10];
+		// Case where WS-CD may have this field but OL may not. This check will make
+		// sure there is no IndexOutOfBoundsException. The size of varargs should be
+		// at least 12 for us to get the value of the methodName
+		String methodName = null;
+		if (varargs.length >= 12) {
+			methodName = (String) varargs[11];
+		}
+		// Case where WS-CD may have these fields but OL may not. This check will make
+		// sure there is no IndexOutOfBoundsException. varargs needs to be greater than
+		// 12 to have the volser and vsam arguments in it.
+		String volser = null;
+		String vsam = null;
+		if (varargs.length > 12) {
+			volser = (String) varargs[12];
+			vsam = (String) varargs[13];
+		}
+
         if (auditServiceRef.getService() != null && auditServiceRef.getService().isAuditRequired(AuditConstants.SECURITY_SAF_AUTHZ, AuditConstants.SUCCESS)) {
-            SAFAuthorizationEvent safAuth = new SAFAuthorizationEvent(safReturnCode, racfReturnCode, racfReasonCode, userSecurityName, applid, safProfile, safClass, authDecision, principleName, accessLevel, errorMessage);
+			SAFAuthorizationEvent safAuth = new SAFAuthorizationEvent(safReturnCode, racfReturnCode, racfReasonCode,
+					userSecurityName, applid, safProfile, safClass, authDecision, principleName, accessLevel,
+					errorMessage, methodName, volser, vsam);
             auditServiceRef.getService().sendEvent(safAuth);
         }
     }

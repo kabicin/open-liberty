@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2016, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -31,6 +31,7 @@ import org.apache.http.ParseException;
 import org.apache.http.StatusLine;
 import org.apache.http.util.EntityUtils;
 
+import com.google.gson.JsonParser;
 import com.ibm.json.java.JSONObject;
 import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
@@ -46,6 +47,7 @@ import com.ibm.ws.security.openidconnect.clients.common.OidcClientRequest;
 import com.ibm.ws.security.openidconnect.clients.common.OidcClientUtil;
 import com.ibm.ws.security.openidconnect.clients.common.UserInfoHelper;
 import com.ibm.ws.security.openidconnect.common.Constants;
+import com.ibm.ws.security.openidconnect.token.JsonTokenUtil;
 import com.ibm.ws.webcontainer.security.AuthResult;
 import com.ibm.ws.webcontainer.security.ProviderAuthenticationResult;
 import com.ibm.ws.webcontainer.security.openidconnect.OidcClient;
@@ -114,8 +116,9 @@ public class AccessTokenAuthenticator {
         }
 
         String validationMethod = clientConfig.getValidationMethod();
-        if (accessToken.indexOf(".") >= 0) {
-            // found n jwt token
+
+        if (isTokenJWT(accessToken)) {
+            // accessToken is a JWT Token
             validationMethod = ClientConstants.VALIDATION_LOCAL;
             oidcClientRequest.setTokenType(OidcClientRequest.TYPE_JWT_TOKEN);
         }
@@ -125,7 +128,7 @@ public class AccessTokenAuthenticator {
             String validationUrl = getPropagationValidationURL(clientConfig, validationMethod);
             sslSocketFactory = getSSLSocketFactory(validationUrl, clientConfig.getSSLConfigurationName(), clientConfig.getClientId());
         } catch (SSLException e) {
-            logError(clientConfig, oidcClientRequest, "OIDC_CLIENT_HTTPS_WITH_SSLCONTEXT_NULL", new Object[] { e.getMessage() != null ? e.getMessage() : "invalid ssl context", clientConfig.getClientId() });
+            logError(clientConfig, oidcClientRequest, "OIDC_CLIENT_HTTPS_WITH_SSLCONTEXT_NULL", new Object[] { e, clientConfig.getClientId() });
             return new ProviderAuthenticationResult(AuthResult.SEND_401, HttpServletResponse.SC_UNAUTHORIZED);
         }
 
@@ -164,6 +167,28 @@ public class AccessTokenAuthenticator {
             Tr.debug(tc, "Token is owned by '" + oidcResult.getUserName() + "'");
         }
         return oidcResult;
+    }
+
+    @FFDCIgnore({ Exception.class })
+    protected boolean isTokenJWT(String token) {
+
+        String[] parts = token.split("\\."); // split out the "parts" (header, payload and signature)
+        if (parts.length > 1) {
+            try {
+                JsonParser parser = new JsonParser();
+                try {
+                    parser.parse(JsonTokenUtil.fromBase64ToJsonString(parts[0])).getAsJsonObject();
+                    return true;
+                } catch (Exception e1) {
+                    parser.parse(JsonTokenUtil.fromBase64ToJsonString(parts[1])).getAsJsonObject();
+                    return true;
+                }
+            } catch (Exception e2) {
+                return false;
+            }
+        } else {
+            return false;
+        }
     }
 
     ProviderAuthenticationResult fixSubject(ProviderAuthenticationResult oidcResult) {
@@ -229,7 +254,7 @@ public class AccessTokenAuthenticator {
             try {
                 sslSocketFactory = sslSupport.getSSLSocketFactory(sslConfigurationName);
             } catch (javax.net.ssl.SSLException e) {
-                throw new SSLException(e.getMessage());
+                throw new SSLException(e);
             }
 
             if (sslSocketFactory != null)
@@ -378,7 +403,6 @@ public class AccessTokenAuthenticator {
 
     protected ProviderAuthenticationResult introspectToken(OidcClientConfig clientConfig, String accessToken, SSLSocketFactory sslSocketFactory, OidcClientRequest oidcClientRequest) {
         ProviderAuthenticationResult oidcResult = new ProviderAuthenticationResult(AuthResult.FAILURE, HttpServletResponse.SC_UNAUTHORIZED);
-
         try {
 
             Map<String, Object> responseMap = oidcClientUtil.checkToken(clientConfig.getValidationEndpointUrl(),
@@ -409,7 +433,7 @@ public class AccessTokenAuthenticator {
             }
         } catch (Exception e) {
             if (tc.isDebugEnabled()) {
-                Tr.debug(tc, "exception during introspectToken =", e.getMessage());
+                Tr.debug(tc, "exception during introspectToken =", e);
                 // Tr.debug(tc, "debugging:" + OidcUtil.dumpStackTrace(new
                 // Exception(), -1));
             }
@@ -426,8 +450,8 @@ public class AccessTokenAuthenticator {
         ProviderAuthenticationResult oidcResult = new ProviderAuthenticationResult(AuthResult.FAILURE, HttpServletResponse.SC_UNAUTHORIZED);
 
         oidcClientRequest.setTokenType(OidcClientRequest.TYPE_JWT_TOKEN);
-        
-        // jose4jUtil will log an error if something was wrong with the token and set the PAR to 401. 
+
+        // jose4jUtil will log an error if something was wrong with the token and set the PAR to 401.
         return jose4jUtil.createResultWithJose4JForJwt(accessToken, clientConfig, oidcClientRequest);
     }
 
@@ -607,8 +631,24 @@ public class AccessTokenAuthenticator {
             return false;
         }
         // ToDo: check exp, iat
-        Date currentDate = new Date();
 
+        if (!isExpValid(jobj, clientConfig)) {
+            return false;
+        }
+        if (!isIatValid(jobj, clientConfig)) {
+            return false;
+        }
+        if (!isIssuerValid(jobj, clientConfig)) {
+            return false;
+        }
+
+        // TODO see whether we need client id checking
+
+        return true;
+    }
+
+    private boolean isExpValid(JSONObject jobj, OidcClientConfig clientConfig) {
+        Date currentDate = new Date();
         Long exp = 0L;
         if (jobj.get("exp") != null && (exp = getLong(jobj.get("exp"))) != null) {
             if (tc.isDebugEnabled()) {
@@ -617,13 +657,16 @@ public class AccessTokenAuthenticator {
             if (!verifyExpirationTime(exp, currentDate, clientConfig.getClockSkewInSeconds(), clientConfig)) {
                 return false;
             }
-        } else {
+        } else if (clientConfig.requireExpClaimForIntrospection()) {
             // required field
-            logError(clientConfig, "PROPAGATION_TOKEN_MISSING_REQUIRED_CLAIM_ERR", "exp", "iss, iat, exp"); // TODO
-                                                                                                            // include
-                                                                                                            // iss?
+            logError(clientConfig, "PROPAGATION_TOKEN_MISSING_REQUIRED_CLAIM_ERR", "exp", "iss, iat, exp");
             return false;
         }
+        return true;
+    }
+
+    private boolean isIatValid(JSONObject jobj, OidcClientConfig clientConfig) {
+        Date currentDate = new Date();
         Long iat = 0L;
         if (jobj.get("iat") != null && (iat = getLong(jobj.get("iat"))) != null) {
             if (tc.isDebugEnabled()) {
@@ -632,22 +675,16 @@ public class AccessTokenAuthenticator {
             if (!checkIssueatTime(iat, currentDate, clientConfig.getClockSkewInSeconds(), clientConfig)) {
                 return false;
             }
-        } else {
+        } else if (clientConfig.requireIatClaimForIntrospection()) {
             // required field
             logError(clientConfig, "PROPAGATION_TOKEN_MISSING_REQUIRED_CLAIM_ERR", "iat", "iss, iat, exp");
             return false;
         }
-        /*
-         * String issuer = null; String issuerIdentifier = null; if
-         * (jobj.get("iss") != null) { issuer = (String)jobj.get("iss"); if
-         * (issuer.isEmpty() || ((issuerIdentifier =
-         * getIssuerIdentifier(clientConfig)) == null) ||
-         * !issuer.equals(issuerIdentifier)) { logError(clientConfig,
-         * "PROPAGATION_TOKEN_ISS_ERROR", issuerIdentifier, issuer); return
-         * false; } } else { //required field logError(clientConfig,
-         * "PROPAGATION_TOKEN_MISSING_REQUIRED_CLAIM_ERR", "iss",
-         * "iss, iat, exp"); return false; }
-         */
+        return true;
+    }
+
+    private boolean isIssuerValid(JSONObject jobj, OidcClientConfig clientConfig) {
+        Date currentDate = new Date();
         if (issuerChecking(jobj, clientConfig)) {
             Long nbf = 0L;
             if (jobj.get("nbf") != null && (nbf = getLong(jobj.get("nbf"))) != null) {
@@ -661,9 +698,6 @@ public class AccessTokenAuthenticator {
         } else {
             return false;
         }
-
-        // TODO see whether we need client id checking
-
         return true;
     }
 
@@ -853,7 +887,7 @@ public class AccessTokenAuthenticator {
                     } catch (Exception e) {
                         //can be ignored
                         if (tc.isDebugEnabled()) {
-                            Tr.debug(tc, "Fail to read Header Segments:", e.getMessage());
+                            Tr.debug(tc, "Fail to read Header Segments:", e);
                         }
                     }
                     return hdrValue;

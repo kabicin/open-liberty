@@ -1,8 +1,8 @@
 /*******************************************************************************
- * Copyright (c) 1997, 2017 IBM Corporation and others.
+ * Copyright (c) 1997, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
+ * which accompanies this distribution,  and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.ibm.websphere.ras.Tr;
@@ -30,14 +31,18 @@ import com.ibm.ws.http.channel.h2internal.frames.FrameHeaders;
 import com.ibm.ws.http.channel.h2internal.frames.FrameRstStream;
 import com.ibm.ws.http.channel.h2internal.hpack.H2HeaderField;
 import com.ibm.ws.http.channel.h2internal.hpack.H2HeaderTable;
+import com.ibm.ws.http.channel.h2internal.hpack.HpackConstants;
 import com.ibm.ws.http.channel.internal.HttpMessages;
 import com.ibm.ws.http.channel.internal.inbound.HttpInboundChannel;
 import com.ibm.ws.http.channel.internal.inbound.HttpInboundLink;
 import com.ibm.ws.http.channel.internal.inbound.HttpInboundServiceContextImpl;
+import com.ibm.ws.http2.GrpcServletServices;
 import com.ibm.ws.http2.upgrade.H2Exception;
 import com.ibm.wsspi.bytebuffer.WsByteBuffer;
 import com.ibm.wsspi.channelfw.ConnectionLink;
 import com.ibm.wsspi.channelfw.VirtualConnection;
+import com.ibm.wsspi.http.channel.HttpRequestMessage;
+import com.ibm.wsspi.http.channel.values.HttpHeaderKeys;
 
 /**
  *
@@ -71,6 +76,59 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
 
         httpInboundServiceContextImpl = (HttpInboundServiceContextImpl) this.getChannelAccessor();
 
+    }
+
+    /**
+     * If a HTTP/2 handler has been registered Http2Consumers which can handle the current content type,
+     * pass the current HTTP through that handler.
+     */
+    @Override
+    public void ready(VirtualConnection inVC) {
+
+        if (getHTTPContext().isH2Connection()) {
+            if (GrpcServletServices.getServletGrpcServices() != null) {
+
+                Map<String, GrpcServletServices.ServiceInformation> servicePaths = GrpcServletServices.getServletGrpcServices();
+                if (servicePaths != null && !servicePaths.isEmpty()) {
+                    setIsGrpcInParentLink(true);
+                    routeGrpcServletRequest(servicePaths);
+                }
+            }
+        }
+        super.ready(inVC);
+    }
+
+    /**
+     * Existing gRPC clients don't know anything about application context roots. For example, a request
+     * might come in to "/helloworld.Greeter/SayHello"; so as a convenience, we will automatically append
+     * the correct application context root to the request. For this example, the URL will change from
+     * "/helloworld.Greeter/SayHello" -> "/app_context_root/helloworld.Greeter/SayHello"
+     */
+    private void routeGrpcServletRequest(Map<String, GrpcServletServices.ServiceInformation> servicePaths) {
+        String requestContentType = getContentType().toLowerCase();
+        if (requestContentType != null && servicePaths != null) {
+            if ("application/grpc".equalsIgnoreCase(requestContentType)) {
+
+                String currentURL = this.pseudoHeaders.get(HpackConstants.PATH);
+
+                String searchURL = currentURL;
+                searchURL = searchURL.substring(1);
+                int index = searchURL.lastIndexOf('/');
+                searchURL = searchURL.substring(0, index);
+
+                GrpcServletServices.ServiceInformation info = servicePaths.get(searchURL);
+                if (info != null) {
+                    String contextRoot = info.getContextRoot();
+                    if (contextRoot != null && !!!"/".equals(contextRoot)) {
+                        String newPath = contextRoot + currentURL;
+                        this.pseudoHeaders.put(HpackConstants.PATH, newPath);
+                        Tr.debug(tc, "Inbound gRPC request translated from " + currentURL + " to " + newPath);
+                        return;
+                    }
+                }
+                Tr.debug(tc, "Inbound gRPC request URL did not match any registered services: " + currentURL);
+            }
+        }
     }
 
     /**
@@ -121,7 +179,7 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
     /**
      * Create Header frames corresponding to a byte array of http headers
      *
-     * @param byte[] marshalledHeaders
+     * @param byte[]  marshalledHeaders
      * @param boolean complete
      * @return ArrayList<Frame> of FrameHeader objects containing the headers
      */
@@ -199,8 +257,8 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
      * The buffers passed in must not exceed the http2 max frame size
      *
      * @param WsByteBuffer[]
-     * @param int length
-     * @param boolean isFinalWrite
+     * @param int            length
+     * @param boolean        isFinalWrite
      * @return ArrayList<Frame> of FrameData objects containing the buffered payload data
      */
     public ArrayList<Frame> prepareBody(WsByteBuffer[] wsbb, int length, boolean isFinalWrite) {
@@ -302,22 +360,47 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
 
         //At this point our side should be in the close state, as we have sent out our data
         //Should probably check if the connection is closed, if so issue the destroy up the chain
-        //Then call the close on the underlying muxLink so we can close the connection if everything has been closed
+        //If a non-connection-error Exception was passed in, we'll reset the stream.
+        //Otherwise, call the close on the underlying muxLink so we can close the connection if everything has been closed
         //Additionally, don't close the underlying link if this is a push stream
         if (streamID == 0 || streamID % 2 == 1) {
             // if this isn't an http/2 exception, don't pass it down, since that will cause a GOAWAY to be sent immediately
             if (e == null || e instanceof Http2Exception) {
-                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                    Tr.debug(tc, "close: closing with exception: " + e);
-                }
-                if (httpInboundServiceContextImpl != null) {
-                    if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                        Tr.debug(tc, "close: (1)httpInboundServiceContextImpl.clear()");
+                Http2Exception h2ex = (Http2Exception) e;
+                if (e != null && !h2ex.isConnectionError()) {
+                    H2StreamProcessor h2sp = muxLink.getStreamProcessor(streamID);
+                    if (h2sp != null && !h2sp.isStreamClosed()) {
+                        try {
+                            if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                                Tr.debug(tc, "close: attempting to reset stream: " + streamID + " with exception: " + e);
+                            }
+                            Frame reset = new FrameRstStream(streamID, h2ex.getErrorCode(), false);
+                            h2sp.processNextFrame(reset, Constants.Direction.WRITING_OUT);
+                        } catch (Http2Exception h2e) {
+                            // if we can't write out RST frame, throw the original exception
+                            if (httpInboundServiceContextImpl != null) {
+                                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                                    Tr.debug(tc, "close: (1)httpInboundServiceContextImpl.clear()");
+                                }
+                                httpInboundServiceContextImpl.clear();
+                                httpInboundServiceContextImpl = null;
+                            }
+                            this.muxLink.close(inVC, e);
+                        }
                     }
-                    httpInboundServiceContextImpl.clear();
-                    httpInboundServiceContextImpl = null;
+                } else {
+                    if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                        Tr.debug(tc, "close: closing with exception: " + e);
+                    }
+                    if (httpInboundServiceContextImpl != null) {
+                        if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                            Tr.debug(tc, "close: (2)httpInboundServiceContextImpl.clear()");
+                        }
+                        httpInboundServiceContextImpl.clear();
+                        httpInboundServiceContextImpl = null;
+                    }
+                    this.muxLink.close(inVC, e);
                 }
-                this.muxLink.close(inVC, e);
             } else {
                 H2StreamProcessor h2sp = muxLink.getStreamProcessor(streamID);
                 if (h2sp != null && !h2sp.isStreamClosed()) {
@@ -332,7 +415,7 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
                         // if we can't write out RST frame, throw the original exception
                         if (httpInboundServiceContextImpl != null) {
                             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                                Tr.debug(tc, "close: (2)httpInboundServiceContextImpl.clear()");
+                                Tr.debug(tc, "close: (3)httpInboundServiceContextImpl.clear()");
                             }
                             httpInboundServiceContextImpl.clear();
                             httpInboundServiceContextImpl = null;
@@ -342,7 +425,7 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
                 }
                 if (httpInboundServiceContextImpl != null) {
                     if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                        Tr.debug(tc, "close: (3)httpInboundServiceContextImpl.clear()");
+                        Tr.debug(tc, "close: (4)httpInboundServiceContextImpl.clear()");
                     }
                     httpInboundServiceContextImpl.clear();
                     httpInboundServiceContextImpl = null;
@@ -443,4 +526,41 @@ public class H2HttpInboundLinkWrap extends HttpInboundLink {
     public ArrayList<H2HeaderField> getReadHeaders() {
         return this.headers;
     }
+
+    public HttpRequestMessage getRequest() {
+        return this.httpInboundServiceContextImpl.getRequest();
+    }
+
+    private String getContentType() {
+        for (H2HeaderField header : this.headers) {
+            if (header.getName().equalsIgnoreCase(HttpHeaderKeys.HDR_CONTENT_TYPE.getName())) {
+                return header.getValue();
+            }
+        }
+        return null;
+    }
+
+    public void setAndStoreNewBodyBuffer(WsByteBuffer buffer) {
+        this.httpInboundServiceContextImpl.storeBuffer(buffer);
+    }
+
+    // attempt to invoke complete() on what is most likely the AsyncReadCallback.
+    // this will tell it that more data is available (via the previous call to storeBuffer),
+    // and the AsyncReadCallback will trigger onDataAvailable
+    public void invokeAppComplete() {
+        if (this.httpInboundServiceContextImpl != null && this.httpInboundServiceContextImpl.getAppReadCallback() != null) {
+            this.httpInboundServiceContextImpl.getAppReadCallback().complete(vc);
+        }
+    }
+
+    public void countDownFirstReadLatch() {
+        H2StreamProcessor h2sp = muxLink.getStreamProcessor(streamID);
+        if (h2sp != null) {
+            if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                Tr.debug(tc, "calling h2sp to count down firstReadLatch: ");
+            }
+            h2sp.countDownFirstReadLatch();
+        }
+    }
+
 }

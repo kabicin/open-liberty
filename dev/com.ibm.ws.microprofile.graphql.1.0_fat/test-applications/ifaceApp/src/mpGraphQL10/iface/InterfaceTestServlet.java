@@ -72,7 +72,7 @@ public class InterfaceTestServlet extends FATServlet {
         assertNotNull(schema);
         assertTrue(schema.contains("Widget"));
         //TODO: uncomment after resolving schema generation issues:
-        //assertTrue(schema.contains("An interface representing an object for sale."));
+        assertTrue(schema.contains("An interface representing an object for sale."));
     }
 
     @Test
@@ -81,19 +81,17 @@ public class InterfaceTestServlet extends FATServlet {
         GraphQLClient client = builder.build(GraphQLClient.class);
         GraphQLOperation graphQLOperation = new GraphQLOperation();
         graphQLOperation.setOperationName("createWidget");
-        graphQLOperation.setQuery("mutation createWidget ($widget: WidgetInput) {" + System.lineSeparator() +
-                                  "  createWidget(widget: $widget) {" + System.lineSeparator() +
+        graphQLOperation.setQuery("mutation createWidget {" + System.lineSeparator() +
+                                  "  createWidget(widget:{" + System.lineSeparator() +
+                                  "    name: \"Chess boards\"" + System.lineSeparator() +
+                                  "    quantity: 25" + System.lineSeparator() +
+                                  "    weight: 12.6" + System.lineSeparator() +
+                                  "  }) {" + System.lineSeparator() +
                                   "    name," + System.lineSeparator() +
                                   "    weight," + System.lineSeparator() +
                                   "  }" + System.lineSeparator() +
                                   "}");
-        graphQLOperation.setVariables("{" + System.lineSeparator() +
-                                      "  \"widget\": {" + System.lineSeparator() +
-                                      "    \"name\": \"Chess boards\"," + System.lineSeparator() +
-                                      "    \"quantity\": 25," + System.lineSeparator() +
-                                      "    \"weight\": 12.6" + System.lineSeparator() +
-                                      "  }" + System.lineSeparator() +
-                                      "}");
+        
         WidgetQueryResponse response = client.allWidgets(graphQLOperation);
         System.out.println("Mutation Response: " + response);
         Widget widget = response.getData().getCreateWidget();

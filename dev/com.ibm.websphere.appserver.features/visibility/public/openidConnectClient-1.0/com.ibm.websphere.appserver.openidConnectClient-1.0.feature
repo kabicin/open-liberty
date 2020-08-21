@@ -18,7 +18,7 @@ Subsystem-Name: OpenID Connect Client
   com.ibm.ws.org.joda.time.1.6.2, \
   com.ibm.ws.com.google.guava, \
   com.ibm.json4j, \
-  com.ibm.ws.org.apache.commons.codec.1.4, \
+  com.ibm.ws.org.apache.commons.codec, \
   com.ibm.ws.security.openidconnect.client, \
   com.ibm.ws.org.apache.commons.logging.1.0.3, \
   com.ibm.ws.security.openidconnect.common, \
@@ -27,7 +27,6 @@ Subsystem-Name: OpenID Connect Client
   com.ibm.ws.com.google.gson.2.2.4, \
   com.ibm.ws.org.jose4j, \
   com.ibm.ws.org.json.simple.1.1.1, \
-  com.ibm.ws.webcontainer.security.provider, \
   com.ibm.websphere.appserver.api.oidc; location:=dev/api/ibm/
 -files=dev/api/ibm/javadoc/com.ibm.websphere.appserver.api.oidc_1.0-javadoc.zip
 kind=ga

@@ -105,7 +105,7 @@ public abstract class InfoVisitor_Annotation extends AnnotationVisitor {
     // annotation class name.  (This is not validated.)
 
     protected InfoVisitor_Annotation(InfoStoreImpl iStore) {
-        super(Opcodes.ASM7);
+        super(Opcodes.ASM8);
 
         this.infoStore = iStore;
 
@@ -284,7 +284,7 @@ public abstract class InfoVisitor_Annotation extends AnnotationVisitor {
 
         return new InfoVisitor_Annotation(infoStore) {
             @Override
-            protected void storeAnnotationValue(String name, AnnotationValueImpl newAnnotationValue) {
+            protected void storeAnnotationValue(String attributeName, AnnotationValueImpl newAnnotationValue) {
                 arrayValue.addArrayValue(newAnnotationValue);
             }
 

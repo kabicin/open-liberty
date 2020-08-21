@@ -11,6 +11,7 @@
 package mpGraphQL10.basicMutation;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -71,11 +72,10 @@ public class BasicMutationTestServlet extends FATServlet {
         assertTrue(schema.contains("Widget"));
         assertTrue(schema.contains("createWidget"));
         assertTrue(schema.contains("Create a new widget for sale."));
-        //TODO: uncomment after resolving schema generation issues:
-//        assertTrue(schema.contains("InputWidget"));
-//        assertFalse(schema.contains("WidgetInput"));
-//        assertTrue(schema.contains("A for-sale item object used for input."));
-//        assertTrue(schema.contains("An object that is for sale."));
+        assertTrue(schema.contains("WidgetInput"));
+        assertTrue(schema.contains("A for-sale item."));
+        assertTrue(schema.contains("quantityOnAllWidgets(newQuantity: Int!): [Widget]"));
+        assertFalse(schema.contains("setQuantityOnAllWidgets"));
     }
 
     @Test
@@ -89,13 +89,7 @@ public class BasicMutationTestServlet extends FATServlet {
                                   "    weight," + System.lineSeparator() +
                                   "  }" + System.lineSeparator() +
                                   "}");
-        graphQLOperation.setVariables("{" + System.lineSeparator() +
-                                      "  \"widget\": {" + System.lineSeparator() +
-                                      "    \"name\": \"Earbuds\"," + System.lineSeparator() +
-                                      "    \"quantity\": 20," + System.lineSeparator() +
-                                      "    \"weight\": 1.2" + System.lineSeparator() +
-                                      "  }" + System.lineSeparator() +
-                                      "}");
+        graphQLOperation.setVariables(Variables.newVars("Earbuds", 20, 1.2));
         WidgetQueryResponse response = client.allWidgets(graphQLOperation);
         System.out.println("Mutation Response: " + response);
         Widget widget = response.getData().getCreateWidget();

@@ -317,11 +317,12 @@ SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST=CWOAU0072E: Il parametro richiesta [{0}
 SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST.explanation=Il valore indicato del parametro specifico nella richiesta OAuth non \u00e8 valido. I valori validi sono elencati nell'attributo indicato della configurazione del server.
 SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST.useraction=Assicurarsi che i valori nel parametro di richiesta siano validi.
 
-security.oauth20.front.end.error=CWOAU0073E: Si \u00e8 verificato un errore nell'autenticazione di un utente. Ritentare l'autenticazione o contattare l'amministratore del sito se il problema persiste.
+# this message is also emitted by the oidc client via the PublicErrorFacingServlet
+security.oauth20.front.end.error=CWOAU0073E: Si \u00e8 verificato un errore di autenticazione. Provare a chiudere il browser web e ritentare l'autenticazione o contattare l'amministratore del sito se il problema persiste.
 security.oauth20.front.end.error.explanation=Nella richiesta potrebbero mancare informazioni, il server potrebbe aver riscontrato un errore interno o qualche altro errore potrebbe aver impedito al server di autenticare correttamente l'utente.
 security.oauth20.front.end.error.useraction=Contattare l'amministratore di sistema per risolvere il problema.
 
-security.oauth20.endpoint.resowner.apppassword.error=CWOAU0074E: Non \u00e8 stata completata la richiesta di scambio password dell''applicazione per l''utente {0} perch\u00e9 non \u00e8 stato possibile verificare la password dell''applicazione. La password dell''applicazione \u00e8 errata, scaduta o revocata, oppure l''ID client fornito non \u00e8 valido.
+security.oauth20.endpoint.resowner.apppassword.error=CWOAU0074E: La richiesta di scambio password dell''applicazione per l''utente {0} non \u00e8 stata completata perch\u00e9 il provider OAuth non ha potuto verificare la password dell''applicazione. La password dell''applicazione \u00e8 errata, scaduta o revocata, oppure l''ID client o ID utente fornito non \u00e8 valido.
 security.oauth20.endpoint.resowner.apppassword.error.explanation=Il provider OAuth non \u00e8 stato in grado di verificare la password dell'applicazione.
 security.oauth20.endpoint.resowner.apppassword.error.useraction=Controllare che la password dell'applicazione sia valida, non sia scaduta e non sia stata revocata. Inoltre, verificare che l'ID client nel token di accesso sia uguale all'ID client nell'intestazione Autorizzazione.
 
@@ -341,14 +342,14 @@ security.oauth20.apppwtok.revoke.disallowed=CWOAU0078E: \u00c8 stato effettuato 
 security.oauth20.apppwtok.revoke.disallowed.explanation=Le password dell'applicazione o i token dell'applicazione devono essere revocati utilizzando gli endpoint app-password o app-token.
 security.oauth20.apppwtok.revoke.disallowed.useraction=Emettere di nuovo la richiesta con l'URI per l'endpoint appropriato per revocare le password o i token dell'applicazione.
 
-security.oauth20.pkce.invalid.method.error=CWOAU0079E: Il parametro richiesta code_challenge_method contiene un algoritmo di trasformazione non valido.
+security.oauth20.pkce.invalid.method.error=CWOAU0079E: Il parametro code_challenge_method nella richiesta contiene un algoritmo di trasformazione non supportato: [{0}]. Gli algoritmi di trasformazione supportati sono: plain, S256.
 security.oauth20.pkce.invalid.method.error.explanation=Il provider OAuth non supporta l'algoritmo di trasformazione specificato. 
-security.oauth20.pkce.invalid.method.error.useraction=Utilizzare "plain" o "S256" come code_challenge_method.
+security.oauth20.pkce.invalid.method.error.useraction=Utilizzare uno degli algoritmi di trasformazione mostrati nel messaggio.
 
-security.oauth20.pkce.codeverifier.length.error=CWOAU0080E: La lunghezza di code_verifier non \u00e8 valida.
+security.oauth20.pkce.codeverifier.length.error=CWOAU0080E: La lunghezza di code_verifier \u00e8 [{0}]. La lunghezza di code_verifier deve essere compresa tra 43 e 128 caratteri.
 security.oauth20.pkce.codeverifier.length.error.explanation=code_verifier deve avere una lunghezza minima di 43 caratteri e massima di 128 caratteri. 
 security.oauth20.pkce.codeverifier.length.error.useraction=Inviare nuovamente le richieste di autenticazione e token con il code_verifier aggiornato che rispetti la lunghezza specificata.
 
-security.oauth20.pkce.error.mismatch.codeverifier=CWOAU0081E: code_challenge e code_verifier non corrispondono.
+security.oauth20.pkce.error.mismatch.codeverifier=CWOAU0081E: code_challenge [{0}] e code_verifier [{1}] non corrispondono. 
 security.oauth20.pkce.error.mismatch.codeverifier.explanation=Il provider OAuth utilizza il code_challenge_method specificato nella richiesta di autorizzazione e trasforma il code_verifier a meno che il code_challenge_method non sia in testo chiaro. Il valore trasformato deve corrispondere con il code_challenge nella richiesta di autorizzazione.
-security.oauth20.pkce.error.mismatch.codeverifier.useraction=Assicurarsi di inviare il code_challenge e il code_verifier corrispondenti e il corretto algoritmo di tasformazione con le richieste di autorizzazione e token.
+security.oauth20.pkce.error.mismatch.codeverifier.useraction=Assicurarsi di inviare il code_challenge e il code_verifier corrispondenti e il corretto algoritmo di trasformazione con le richieste di autorizzazione e token.

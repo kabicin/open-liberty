@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -133,6 +133,7 @@ public class SlowRequestManager {
 										//Re-check the state of the request, if it has completed don't log it.
 										if(requestContext.getRootEvent().getEndTime() == 0){
 											Tr.warning(tc, "REQUEST_TIMER_WARNING",	requestContext.getRequestId().getId(), threadId, requestDuration, stackTrace,	dumpTree);
+											requestContext.setSlow(true);
 										}
 									}
 									// This enables to count new slow threads and not duplicates

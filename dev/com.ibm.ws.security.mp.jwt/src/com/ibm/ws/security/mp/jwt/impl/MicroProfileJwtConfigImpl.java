@@ -46,6 +46,8 @@ import com.ibm.ws.security.mp.jwt.error.MpJwtProcessingException;
 import com.ibm.wsspi.kernel.service.utils.AtomicServiceReference;
 import com.ibm.wsspi.ssl.SSLSupport;
 
+import io.openliberty.security.mp.jwt.osgi.MpJwtRuntimeVersion;
+
 /**
  *
  */
@@ -91,6 +93,9 @@ public class MicroProfileJwtConfigImpl implements MicroProfileJwtConfig {
 
     public static final String KEY_groupNameAttribute = "groupNameAttribute";
     protected String groupNameAttribute = null;
+
+    public static final String KEY_authorizationHeaderScheme = "authorizationHeaderScheme";
+    protected String authorizationHeaderScheme = null;
 
     public static final String CFG_KEY_TOKEN_REUSE = "tokenReuse";
     protected boolean tokenReuse = true;
@@ -162,6 +167,7 @@ public class MicroProfileJwtConfigImpl implements MicroProfileJwtConfig {
         this.userNameAttribute = configUtils.getConfigAttribute(props, KEY_userNameAttribute);
         this.groupNameAttribute = configUtils.getConfigAttribute(props, KEY_groupNameAttribute);
 
+        this.authorizationHeaderScheme = configUtils.getConfigAttribute(props, KEY_authorizationHeaderScheme);
         this.clockSkewMilliSeconds = configUtils.getLongConfigAttribute(props, CFG_KEY_CLOCK_SKEW, clockSkewMilliSeconds);
 
         this.sslRef = configUtils.getConfigAttribute(props, KEY_sslRef);
@@ -182,10 +188,26 @@ public class MicroProfileJwtConfigImpl implements MicroProfileJwtConfig {
         this.signatureAlgorithm = configUtils.getConfigAttribute(props, CFG_KEY_SIGALG);
         sharedKey = JwtUtils.processProtectedString(props, JwtUtils.CFG_KEY_SHARED_KEY);
 
+        loadConfigValuesForHigherVersions(cc, props);
+
         debug();
         if (tc.isDebugEnabled()) {
             Tr.exit(tc, methodName);
         }
+    }
+
+    void loadConfigValuesForHigherVersions(ComponentContext cc, Map<String, Object> props) {
+        MicroProfileJwtService mpJwtService = mpJwtServiceRef.getService();
+        if (mpJwtService == null) {
+            return;
+        }
+        MpJwtRuntimeVersion runtimeVersion = mpJwtService.getMpJwtRuntimeVersion();
+        if (runtimeVersion == null) {
+            System.out.println("Failed to find runtime version");
+            return;
+        }
+        // TODO
+        System.out.println("Loaded MP JWT runtime: " + runtimeVersion + " (version " + runtimeVersion.getVersion() + ")");
     }
 
     protected void debug() {
@@ -456,6 +478,12 @@ public class MicroProfileJwtConfigImpl implements MicroProfileJwtConfig {
     @Override
     public String getGroupNameAttribute() {
         return this.groupNameAttribute;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String getAuthorizationHeaderScheme() {
+        return this.authorizationHeaderScheme;
     }
 
     /** {@inheritDoc} */

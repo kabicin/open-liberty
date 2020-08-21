@@ -39,8 +39,10 @@ import org.eclipse.persistence.annotations.ClassExtractor;
 
 import com.ibm.jbatch.container.ws.InstanceState;
 import com.ibm.jbatch.container.ws.WSJobInstance;
+import com.ibm.websphere.ras.annotation.Trivial;
 
 @NamedQueries({
+                @NamedQuery(name = JobInstanceEntity.GET_JOBINSTANCEIDS_BY_NAME_AND_STATUSES_QUERY, query = "SELECT i.instanceId FROM JobInstanceEntity i WHERE i.batchStatus IN :status AND i.jobName = :name"),
                 @NamedQuery(name = JobInstanceEntity.GET_JOBINSTANCES_SORT_BY_CREATETIME_FIND_ALL_QUERY, query = "SELECT i FROM JobInstanceEntity i ORDER BY i.createTime DESC"),
                 @NamedQuery(name = JobInstanceEntity.GET_JOBINSTANCES_SORT_BY_CREATETIME_FIND_BY_SUBMITTER_QUERY, query = "SELECT i FROM JobInstanceEntity i WHERE i.submitter = :submitter ORDER BY i.createTime DESC"),
                 @NamedQuery(name = JobInstanceEntity.GET_JOB_NAMES_SET_QUERY, query = "SELECT DISTINCT i.jobName FROM JobInstanceEntity i"),
@@ -63,6 +65,7 @@ public class JobInstanceEntity implements JobInstance, WSJobInstance, EntityCons
     public static final String GET_JOBINSTANCE_COUNT_BY_JOBNAME_AND_SUBMITTER_QUERY = "JobInstanceEntity.getJobInstanceCountByJobNameAndSubmitterQuery";
     public static final String GET_JOB_NAMES_SET_QUERY = "JobInstanceEntity.getJobNamesSetQuery";
     public static final String GET_JOB_NAMES_SET_BY_SUBMITTER_QUERY = "JobInstanceEntity.getJobNamesSetBySubmitterQuery";
+    public static final String GET_JOBINSTANCEIDS_BY_NAME_AND_STATUSES_QUERY = "JobInstanceEntity.getJobInstancesByNameAndStatus";
 
     /*
      * Key, and constructors
@@ -73,7 +76,9 @@ public class JobInstanceEntity implements JobInstance, WSJobInstance, EntityCons
     private long instanceId;
 
     // JPA
-    public JobInstanceEntity() {}
+    @Trivial
+    public JobInstanceEntity() {
+    }
 
     // in-memory
     public JobInstanceEntity(long instanceId) {
@@ -266,7 +271,8 @@ public class JobInstanceEntity implements JobInstance, WSJobInstance, EntityCons
         return null;
     }
 
-    public void setLastUpdatedTime(Date lastUpdatedTime) {}
+    public void setLastUpdatedTime(Date lastUpdatedTime) {
+    }
 
     public int getNumberOfExecutions() {
         return numberOfExecutions;

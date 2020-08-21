@@ -10,8 +10,6 @@
 #*******************************************************************************
 -include= jar:${fileuri;${repo;org.apache.cxf:cxf-rt-frontend-jaxrs;3.3.0}}!/META-INF/MANIFEST.MF,bnd.overrides
 
-javac.source: 1.8
-javac.target: 1.8
 
 -includeresource: \
    @${repo;org.apache.cxf:cxf-rt-frontend-jaxrs;3.3.3.20190529}!/!META-INF/*,\
@@ -42,3 +40,7 @@ javac.target: 1.8
   com.ibm.wsspi.org.osgi.service.component,\
   com.ibm.wsspi.org.osgi.service.component.annotations,\
   javax.activation:activation;version=1.1
+
+-testpath: \
+	../build.sharedResources/lib/junit/old/junit.jar;version=file, \
+  
