@@ -36,8 +36,6 @@ public class H2StreamResultManager {
     /*
      * hashtable to store the H2StreamResult objects
      */
-    //WDW private final Hashtable<Integer, H2StreamResult> streamHashtable;
-    //WDW private final Hashtable<FramePushPromiseClient, H2StreamResult> pushPromiseH2StreamResults;
     private final ConcurrentHashMap<Integer, H2StreamResult> streamHashtable;
     private final ConcurrentHashMap<FramePushPromiseClient, H2StreamResult> pushPromiseH2StreamResults;
 
@@ -50,8 +48,6 @@ public class H2StreamResultManager {
     private static final Logger LOGGER = Logger.getLogger(CLASS_NAME);
 
     public H2StreamResultManager() {
-        //WDW this.streamHashtable = new Hashtable<Integer, H2StreamResult>();
-        //WDW this.pushPromiseH2StreamResults = new Hashtable<FramePushPromiseClient, H2StreamResult>();
         this.streamHashtable = new ConcurrentHashMap<Integer, H2StreamResult>();
         this.pushPromiseH2StreamResults = new ConcurrentHashMap<FramePushPromiseClient, H2StreamResult>();
     }
@@ -316,12 +312,12 @@ public class H2StreamResultManager {
             //this is to process all the frame in stream id 0. These don't set end of stream flag nor RST_STREAM
             else if (lookupStreamResult(streamId).getStreamId() == 0) {
                 if (!lookupStreamResult(streamId).receivedAtLeastExpectedNumberOfFrames()) {
-                    if (LOGGER.isLoggable(Level.INFO))
-                        LOGGER.logp(Level.INFO, CLASS_NAME, "receivedAllFrames", "StreamID: " + lookupStreamResult(streamId).getStreamId() + " has not finished.");
+                    if (LOGGER.isLoggable(Level.FINEST))
+                        LOGGER.logp(Level.FINEST, CLASS_NAME, "receivedAllFrames", "StreamID: " + lookupStreamResult(streamId).getStreamId() + " has not finished.");
                     return false;
                 } else if (lookupStreamResult(streamId).isgoawayExpected() && !lookupStreamResult(streamId).goawayReceived()) {
-                    if (LOGGER.isLoggable(Level.INFO))
-                        LOGGER.logp(Level.INFO, CLASS_NAME, "receivedAllFrames", "StreamID: " + lookupStreamResult(streamId).getStreamId() + " has not received goaway.");
+                    if (LOGGER.isLoggable(Level.FINEST))
+                        LOGGER.logp(Level.FINEST, CLASS_NAME, "receivedAllFrames", "StreamID: " + lookupStreamResult(streamId).getStreamId() + " has not received goaway.");
                     return false;
                 }
             }

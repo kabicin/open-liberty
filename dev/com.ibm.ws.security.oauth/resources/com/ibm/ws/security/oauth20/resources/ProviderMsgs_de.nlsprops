@@ -317,11 +317,12 @@ SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST=CWOAU0072E: Der Anforderungsparameter [
 SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST.explanation=Der angegebene Wert des angegebenen Parameters in der OAuth-Anforderung ist nicht g\u00fcltig. Die g\u00fcltigen Werte sind im angegebenen Attribut der Serverkonfiguration aufgelistet.
 SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST.useraction=Stellen Sie sicher, dass die Werte im Anforderungsparameter g\u00fcltig sind.
 
-security.oauth20.front.end.error=CWOAU0073E: Es ist ein Fehler bei der Authentifizierung eines Benutzers aufgetreten. Wiederholen Sie die Authentifizierung oder wenden Sie sich an den Siteadministrator, wenn das Problem weiterhin auftritt.
+# this message is also emitted by the oidc client via the PublicErrorFacingServlet
+security.oauth20.front.end.error=CWOAU0073E: Es ist ein Authentifizierungsfehler aufgetreten. Versuchen Sie, den Web-Browser zu schlie\u00dfen, und wiederholen Sie die Authentifizierung oder wenden Sie sich an den Siteadministrator, wenn das Problem weiterhin auftritt.
 security.oauth20.front.end.error.explanation=Es ist m\u00f6glich, dass in der Anforderung Informationen fehlen, dass ein interner Fehler im Server aufgetreten ist oder dass ein anderer Fehler die erfolgreiche Authentifizierung des Benutzers verhindert.
 security.oauth20.front.end.error.useraction=Bitten Sie Ihren Systemadministrator, das Problem zu beheben.
 
-security.oauth20.endpoint.resowner.apppassword.error=CWOAU0074E: Die Austauschanforderung f\u00fcr das Anwendungskennwort f\u00fcr den Benutzer {0} konnte nicht ausgef\u00fchrt werden, weil das Anwendungskennwort nicht best\u00e4tigt werden konnte. Das Anwendungskennwort ist entweder falsch, abgelaufen oder wurde widerrufen, oder die angegebene Client-ID ist nicht g\u00fcltig.
+security.oauth20.endpoint.resowner.apppassword.error=CWOAU0074E: Die Austauschanforderung f\u00fcr das Anwendungskennwort f\u00fcr den Benutzer {0} konnte nicht ausgef\u00fchrt werden, weil der OAuth-Provider das Anwendungskennwort nicht verifizieren konnte. Das Anwendungskennwort ist entweder falsch, abgelaufen oder wurde widerrufen, oder die angegebene Client-ID oder Benutzer-ID ist nicht g\u00fcltig.
 security.oauth20.endpoint.resowner.apppassword.error.explanation=Der OAuth-Provider konnte das Anwendungskennwort nicht best\u00e4tigen.
 security.oauth20.endpoint.resowner.apppassword.error.useraction=Vergewissern Sie sich, dass das Anwendungskennwort g\u00fcltig und nicht abgelaufen ist und nicht widerrufen wurde. \u00dcberpr\u00fcfen Sie au\u00dferdem, dass die Client-ID im Zugriffstoken mit der Client-ID im Berechtigungsheader \u00fcbereinstimmt.
 
@@ -341,14 +342,14 @@ security.oauth20.apppwtok.revoke.disallowed=CWOAU0078E: Es wurde versucht, ein A
 security.oauth20.apppwtok.revoke.disallowed.explanation=Anwendungskennw\u00f6rter oder Anwendungstoken m\u00fcssen von den Endpunkten app-passwords bzw. app-tokens widerrufen werden.
 security.oauth20.apppwtok.revoke.disallowed.useraction=Setzen Sie die Anforderung mit dem URI f\u00fcr den entsprechenden Endpunkt erneut ab, um Anwendungskennw\u00f6rter bzw. Anwendungstoken zu widerrufen.
 
-security.oauth20.pkce.invalid.method.error=CWOAU0079E: Der Anforderungsparameter code_challenge_method enth\u00e4lt einen nicht unterst\u00fctzten Transformationsalgorithmus.
+security.oauth20.pkce.invalid.method.error=CWOAU0079E: Der Parameter code_challenge_method in der Anforderung enth\u00e4lt einen nicht unterst\u00fctzten Transformationsalgorithmus: [{0}]. Die unterst\u00fctzten Transformationsalgorithmen sind: plain, S256.
 security.oauth20.pkce.invalid.method.error.explanation=Der OAuth-Provider unterst\u00fctzt nicht den angegebenen Transformationsalgorithmus. 
-security.oauth20.pkce.invalid.method.error.useraction=Verwenden Sie f\u00fcr code_challenge_method entweder "plain" oder "S256".
+security.oauth20.pkce.invalid.method.error.useraction=Verwenden Sie einen in der Nachricht angezeigten Transformationsalgorithmen.
 
-security.oauth20.pkce.codeverifier.length.error=CWOAU0080E: Die L\u00e4nge f\u00fcr code_verifier ist ung\u00fcltig.
+security.oauth20.pkce.codeverifier.length.error=CWOAU0080E: Die L\u00e4nge f\u00fcr code_verifier ist [{0}]. Die L\u00e4nge f\u00fcr code_verifier muss zwischen 43 und 128 Zeichen lang sein.
 security.oauth20.pkce.codeverifier.length.error.explanation=Code_verifier muss eine L\u00e4nge von mindestens 43 Zeichen und maximal 128 Zeichen haben. 
 security.oauth20.pkce.codeverifier.length.error.useraction=Senden Sie die Berechtigungs- und Tokenanforderungen erneut mit dem aktualisierten code_verifier, dessen L\u00e4nge den Vorgaben entspricht.
 
-security.oauth20.pkce.error.mismatch.codeverifier=CWOAU0081E: Code_challenge und code_verifier stimmen nicht \u00fcberein.
+security.oauth20.pkce.error.mismatch.codeverifier=CWOAU0081E: code_challenge [{0}] und code_verifier [{1}] stimmen nicht \u00fcberein. 
 security.oauth20.pkce.error.mismatch.codeverifier.explanation=Der OAuth-Provider verwendet die code_challenge_method-Angabe in der Berechtigungsanforderung und transformiert den code_verifier, sofern f\u00fcr code_challenge_method 'plain' angegeben wurde. Der transformierte Wert muss der code_challenge-Angabe in der Berechtigungsanforderung entsprechen.
 security.oauth20.pkce.error.mismatch.codeverifier.useraction=Vergewissern Sie sich, dass Sie mit den Berechtigungs- und Tokenanforderungen die entsprechenden code_challenge- und code_verifier-Angaben sowie den richtigen Transformationsalgorithmus senden.

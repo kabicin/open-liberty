@@ -16,11 +16,16 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
 
+import com.ibm.ws.jpa.injection_dpu.JPA10InjectionDPU_Applevel;
+import com.ibm.ws.jpa.injection_dpu.JPA10InjectionDPU_Earlevel;
+
 import componenttest.rules.repeater.RepeatTests;
 
 @RunWith(Suite.class)
 @SuiteClasses({
                 JPAInjectionFATSuite.class,
+                JPA10InjectionDPU_Applevel.class,
+                JPA10InjectionDPU_Earlevel.class,
                 componenttest.custom.junit.runner.AlwaysPassesTest.class
 })
 public class FATSuite {
@@ -32,7 +37,8 @@ public class FATSuite {
                     .with(new RepeatWithJPA21())
                     .andWith(new RepeatWithJPA22())
                     .andWith(new RepeatWithJPA20())
-                    .andWith(new RepeatWithJPA22Hibernate());
+                    .andWith(new RepeatWithJPA22Hibernate())
+                    .andWith(new RepeatWithJPA30());
 
     public static String repeatPhase = "";
 }

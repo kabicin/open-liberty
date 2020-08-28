@@ -12,7 +12,7 @@ IBM-API-Package: io.opentracing;  type="third-party",\
                  com.ibm.ws.opentracing.tracer; type="ibm-spi"
 -features=com.ibm.websphere.appserver.jaxrs-2.0; ibm.tolerates:=2.1, \
           com.ibm.websphere.appserver.cdi-1.2; ibm.tolerates:=2.0
--bundles=com.ibm.ws.require.java8, \
+-bundles=com.ibm.ws.jaxrs.defaultexceptionmapper, \
          com.ibm.ws.opentracing.1.1, \
          com.ibm.ws.opentracing.1.1.cdi, \
          com.ibm.ws.io.opentracing.opentracing-util.0.31.0, \
@@ -21,3 +21,4 @@ IBM-API-Package: io.opentracing;  type="third-party",\
 -files= dev/spi/ibm/javadoc/com.ibm.websphere.appserver.spi.opentracing.1.1_1.0-javadoc.zip
 kind=ga
 edition=core
+WLP-Activation-Type: parallel

@@ -11,14 +11,11 @@
 -include= ~../cnf/resources/bnd/bundle.props
 bVersion=1.0
 
-javac.source: 1.8
-javac.target: 1.8
 
 Bundle-Name: Microprofile JWT Public APIs
 Bundle-SymbolicName: com.ibm.websphere.org.eclipse.microprofile.jwt.1.0; singleton:=true
 Bundle-ActivationPolicy: lazy
 
-Require-Capability: osgi.ee; filter:="(&(osgi.ee=JavaSE)(version=1.8))"
 
 WS-TraceGroup: security
 
@@ -36,7 +33,6 @@ Include-Resource: \
   @${repo;org.eclipse.microprofile.jwt:microprofile-jwt-auth-api;1.0}                
 	
 -buildpath: \
-    com.ibm.ws.require.java8;version=latest, \
 	com.ibm.websphere.javaee.cdi.1.2;version=latest,\
 	com.ibm.websphere.javaee.jsonp.1.0
 

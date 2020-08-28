@@ -42,8 +42,8 @@ import com.ibm.websphere.simplicity.config.wim.LdapRegistry;
 import com.ibm.websphere.simplicity.config.wim.RealmPropertyMapping;
 import com.ibm.websphere.simplicity.config.wim.SearchResultsCache;
 import com.ibm.websphere.simplicity.log.Log;
-import com.ibm.ws.security.registry.test.UserRegistryServletConnection;
 import com.ibm.ws.com.unboundid.InMemoryLDAPServer;
+import com.ibm.ws.security.registry.test.UserRegistryServletConnection;
 import com.unboundid.ldap.sdk.Entry;
 
 import componenttest.custom.junit.runner.FATRunner;
@@ -298,7 +298,7 @@ public class URAPIs_RealmPropertyMappingTest {
         server.getLdapRegistries().add(ldap);
         ldap.setRealm("LDAPRealm");
         ldap.setHost("localhost");
-        ldap.setPort(String.valueOf(ds.getListenPort()));
+        ldap.setPort(String.valueOf(ds.getLdapPort()));
         ldap.setBaseDN(LDAP_BASE_DN);
         ldap.setBindDN(InMemoryLDAPServer.getBindDN());
         ldap.setBindPassword(InMemoryLDAPServer.getBindPassword());

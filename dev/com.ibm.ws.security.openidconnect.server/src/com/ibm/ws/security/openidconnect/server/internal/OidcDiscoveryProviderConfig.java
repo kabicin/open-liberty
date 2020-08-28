@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -76,5 +76,8 @@ public class OidcDiscoveryProviderConfig {
         endpointMap.put(OIDCConstants.KEY_OIDC_REVOKE_EP_QUAL, EndpointType.revoke.name());
         endpointMap.put(OIDCConstants.KEY_OIDC_APP_PASSWORDS_EP_QUAL, EndpointType.app_password_effective_name);
         endpointMap.put(OIDCConstants.KEY_OIDC_APP_TOKENS_EP_QUAL, EndpointType.app_token_effective_name);
+        endpointMap.put(OIDCConstants.KEY_OIDC_PERSONAL_TOKEN_MGMT_EP_QUAL, EndpointType.personalTokenManagement.name());
+        endpointMap.put(OIDCConstants.KEY_OIDC_USERS_TOKEN_MGMT_EP_QUAL, EndpointType.usersTokenManagement.name());
+        endpointMap.put(OIDCConstants.KEY_OIDC_CLIENT_MGMT_EP_QUAL, EndpointType.clientManagement.name());
     }
 }

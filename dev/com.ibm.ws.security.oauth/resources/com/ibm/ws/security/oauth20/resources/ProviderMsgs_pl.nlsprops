@@ -317,11 +317,12 @@ SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST=CWOAU0072E: Parametr \u017c\u0105dania 
 SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST.explanation=Wskazywana warto\u015b\u0107 okre\u015blonego parametru w \u017c\u0105daniu OAuth nie jest poprawna. Poprawne warto\u015bci s\u0105 wy\u015bwietlane we wskazanym atrybucie konfiguracji serwera.
 SECURITY.OAUTH20.ERROR.VALUE.NOT.IN.LIST.useraction=Sprawd\u017a, czy warto\u015bci w parametrze \u017c\u0105dania s\u0105 poprawne.
 
-security.oauth20.front.end.error=CWOAU0073E: Wyst\u0105pi\u0142 b\u0142\u0105d podczas uwierzytelniania u\u017cytkownika. Je\u015bli problem nadal wyst\u0119puje, podejmij ponown\u0105 pr\u00f3b\u0119 uwierzytelnienia lub skontaktuj si\u0119 z administratorem serwisu.
+# this message is also emitted by the oidc client via the PublicErrorFacingServlet
+security.oauth20.front.end.error=CWOAU0073E: Wyst\u0105pi\u0142 b\u0142\u0105d uwierzytelniania. Spr\u00f3buj zamkn\u0105\u0107 przegl\u0105dark\u0119 WWW i ponowi\u0107 uwierzytelnienie lub skontaktuj si\u0119 z administratorem serwisu, je\u015bli problem b\u0119dzie nadal wyst\u0119powa\u0142.
 security.oauth20.front.end.error.explanation=W \u017c\u0105daniu mo\u017ce brakowa\u0107 informacji, serwer m\u00f3g\u0142 napotka\u0107 b\u0142\u0105d wewn\u0119trzny lub inny b\u0142\u0105d m\u00f3g\u0142 uniemo\u017cliwi\u0107 serwerowi uwierzytelnienie u\u017cytkownika.
 security.oauth20.front.end.error.useraction=Skontaktuj si\u0119 z administratorem systemu, aby rozwi\u0105za\u0107 ten problem.
 
-security.oauth20.endpoint.resowner.apppassword.error=CWOAU0074E: \u017b\u0105danie wymiany has\u0142a aplikacji dla u\u017cytkownika {0} nie zosta\u0142o uko\u0144czone, poniewa\u017c nie uda\u0142o si\u0119 zweryfikowa\u0107 has\u0142a aplikacji. Has\u0142o aplikacji jest niepoprawne, utraci\u0142o wa\u017cno\u015b\u0107 lub zosta\u0142o uniewa\u017cnione albo podany identyfikator klienta jest niepoprawny.
+security.oauth20.endpoint.resowner.apppassword.error=CWOAU0074E: \u017b\u0105danie wymiany has\u0142a aplikacji dla u\u017cytkownika {0} nie zosta\u0142o wykonane, poniewa\u017c dostawca OAuth nie m\u00f3g\u0142 zweryfikowa\u0107 has\u0142a aplikacji. Has\u0142o aplikacji jest niepoprawne, utraci\u0142o wa\u017cno\u015b\u0107 lub zosta\u0142o uniewa\u017cnione, albo podany identyfikator klienta lub identyfikator u\u017cytkownika s\u0105 niepoprawne.
 security.oauth20.endpoint.resowner.apppassword.error.explanation=Dostawca OAuth nie by\u0142 w stanie zweryfikowa\u0107 has\u0142a aplikacji.
 security.oauth20.endpoint.resowner.apppassword.error.useraction=Upewnij si\u0119, \u017ce has\u0142o aplikacji jest poprawne, nie utraci\u0142o wa\u017cno\u015bci i nie zosta\u0142o odwo\u0142ane. Upewnij si\u0119 r\u00f3wnie\u017c, \u017ce identyfikator klienta w znaczniku dost\u0119pu jest taki sam, jak identyfikator klienta w nag\u0142\u00f3wku Authorization.
 
@@ -341,14 +342,14 @@ security.oauth20.apppwtok.revoke.disallowed=CWOAU0078E: Podj\u0119to pr\u00f3b\u
 security.oauth20.apppwtok.revoke.disallowed.explanation=Has\u0142a aplikacji lub znaczniki aplikacji musz\u0105 zosta\u0107 uniewa\u017cnione przy u\u017cyciu punkt\u00f3w ko\u0144cowych app-passwords lub app-tokens.
 security.oauth20.apppwtok.revoke.disallowed.useraction=Wy\u015blij ponownie to \u017c\u0105danie, podaj\u0105c identyfikator URI odpowiedniego punktu ko\u0144cowego w celu uniewa\u017cnienia hase\u0142 aplikacji lub znacznik\u00f3w aplikacji.
 
-security.oauth20.pkce.invalid.method.error=CWOAU0079E: Parametr \u017c\u0105dania code_challenge_method zawiera nieobs\u0142ugiwany algorytm transformacji.
+security.oauth20.pkce.invalid.method.error=CWOAU0079E: Parametr code_challenge_method w \u017c\u0105daniu zawiera nieobs\u0142ugiwany algorytm transformacji: [{0}]. Obs\u0142ugiwane s\u0105 nast\u0119puj\u0105ce algorytmy transformacji: plain i S256.
 security.oauth20.pkce.invalid.method.error.explanation=Dostawca OAuth nie obs\u0142uguje okre\u015blonego algorytmu transformacji. 
-security.oauth20.pkce.invalid.method.error.useraction=U\u017cyj \u0142a\u0144cucha "plain" lub "S256" jako warto\u015bci parametru code_challenge_method.
+security.oauth20.pkce.invalid.method.error.useraction=U\u017cyj jednego z algorytm\u00f3w podanych w komunikacie.
 
-security.oauth20.pkce.codeverifier.length.error=CWOAU0080E: D\u0142ugo\u015b\u0107 parametru code_verifier length jest niepoprawna.
+security.oauth20.pkce.codeverifier.length.error=CWOAU0080E: D\u0142ugo\u015b\u0107 parametru code_verifier to [{0}]. Parametr code_verifier musi mie\u0107 d\u0142ugo\u015b\u0107 od 43 do 128 znak\u00f3w.
 security.oauth20.pkce.codeverifier.length.error.explanation=Parametr code_verifier powinien zawiera\u0107 co najmniej 43 znaki i nie wi\u0119cej ni\u017c 128 znak\u00f3w. 
 security.oauth20.pkce.codeverifier.length.error.useraction=Wy\u015blij ponownie \u017c\u0105dania autoryzacji i znacznik\u00f3w, u\u017cywaj\u0105c zaktualizowanej warto\u015bci parametru code_verifier, kt\u00f3ra spe\u0142nia wymagania dotycz\u0105ce d\u0142ugo\u015bci.
 
-security.oauth20.pkce.error.mismatch.codeverifier=CWOAU0081E: Warto\u015bci parametr\u00f3w code_challenge i code_verifier nie s\u0105 zgodne.
+security.oauth20.pkce.error.mismatch.codeverifier=CWOAU0081E: Parametry code_challenge [{0}] i code_verifier [{1}] nie s\u0105 zgodne. 
 security.oauth20.pkce.error.mismatch.codeverifier.explanation=Dostawca OAuth u\u017cywa parametru code_challenge_method podanego w \u017c\u0105daniu autoryzacji i przekszta\u0142ca parametr code_verifier, chyba \u017ce parametr code_challenge_method ma warto\u015b\u0107 plain. Przekszta\u0142cona warto\u015b\u0107 powinna by\u0107 zgodna z warto\u015bci\u0105 parametru code_challenge w \u017c\u0105daniu autoryzacji.
 security.oauth20.pkce.error.mismatch.codeverifier.useraction=Nale\u017cy wys\u0142a\u0107 zgodne warto\u015bci parametr\u00f3w code_challenge i code_verifier i poprawi\u0107 algorytm transformacji w \u017c\u0105daniach autoryzacji i znacznik\u00f3w.

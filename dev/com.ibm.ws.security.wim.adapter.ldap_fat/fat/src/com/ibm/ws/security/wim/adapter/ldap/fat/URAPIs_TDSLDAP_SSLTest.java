@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012, 2013 IBM Corporation and others.
+ * Copyright (c) 2012, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -17,19 +17,22 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.util.List;
 
 import org.junit.AfterClass;
 import org.junit.Assume;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 
+import com.ibm.websphere.simplicity.config.ServerConfiguration;
+import com.ibm.websphere.simplicity.config.wim.LdapRegistry;
 import com.ibm.websphere.simplicity.log.Log;
+import com.ibm.ws.com.unboundid.InMemoryTDSLDAPServer;
 import com.ibm.ws.security.registry.EntryNotFoundException;
-import com.ibm.ws.security.registry.RegistryException;
 import com.ibm.ws.security.registry.SearchResult;
 import com.ibm.ws.security.registry.test.UserRegistryServletConnection;
 
@@ -47,19 +50,71 @@ public class URAPIs_TDSLDAP_SSLTest {
     private static final Class<?> c = URAPIs_TDSLDAP_SSLTest.class;
     private static UserRegistryServletConnection servlet;
 
-    //private final LeakedPasswordChecker passwordChecker = new LeakedPasswordChecker(server);
+    /** Test rule for testing for expected exceptions. */
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
+    private static InMemoryTDSLDAPServer ldapServer;
 
     /**
-     * Updates the sample, which is expected to be at the hard-coded path.
-     * If this test is failing, check this path is correct.
+     * Setup the test case.
+     *
+     * @throws Exception If the setup failed for some reason.
      */
     @BeforeClass
-    public static void setUp() throws Exception {
-        // Add LDAP variables to bootstrap properties file
+    public static void setupClass() throws Exception {
+        setupLdapServer();
+        setupLibertyServer();
+    }
+
+    /**
+     * Tear down the test.
+     */
+    @AfterClass
+    public static void teardownClass() throws Exception {
+        try {
+            if (server != null) {
+                server.stopServer("CWIML4529E", "CWIML4537E", "CWPKI0041W");
+            }
+        } finally {
+            try {
+                if (ldapServer != null) {
+                    ldapServer.shutDown(true);
+                }
+            } catch (Exception e) {
+                Log.error(c, "teardown", e, "LDAP server threw error while shutting down. " + e.getMessage());
+            }
+            server.deleteFileFromLibertyInstallRoot("lib/features/internalfeatures/securitylibertyinternals-1.0.mf");
+        }
+    }
+
+    /**
+     * Setup the Liberty server. This server will start with very basic configuration. The tests
+     * will configure the server dynamically.
+     *
+     * @throws Exception If there was an issue setting up the Liberty server.
+     */
+    public static void setupLibertyServer() throws Exception {
+        /*
+         * Add LDAP variables to bootstrap properties file
+         */
         LDAPUtils.addLDAPVariables(server);
         Log.info(c, "setUp", "Starting the server... (will wait for userRegistry servlet to start)");
         server.copyFileToLibertyInstallRoot("lib/features", "internalfeatures/securitylibertyinternals-1.0.mf");
         server.addInstalledAppForValidation("userRegistry");
+
+        /*
+         * Update LDAP configuration with In-Memory Server
+         */
+        ServerConfiguration serverConfig = server.getServerConfiguration();
+        LdapRegistry ldap = serverConfig.getLdapRegistries().get(0);
+        ldap.setHost("localhost");
+        ldap.setPort(String.valueOf(ldapServer.getLdapsPort()));
+        ldap.setBindDN(InMemoryTDSLDAPServer.getBindDN());
+        ldap.setBindPassword(InMemoryTDSLDAPServer.getBindPassword());
+        server.updateServerConfiguration(serverConfig);
+        /*
+         * Make sure the application has come up before proceeding
+         */
         server.startServer(c.getName() + ".log");
 
         //Make sure the application has come up before proceeding
@@ -79,14 +134,13 @@ public class URAPIs_TDSLDAP_SSLTest {
         }
     }
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        Log.info(c, "tearDown", "Stopping the server...");
-        try {
-            server.stopServer("CWIML4529E", "CWIML4537E", "CWPKI0041W");
-        } finally {
-            server.deleteFileFromLibertyInstallRoot("lib/features/internalfeatures/securitylibertyinternals-1.0.mf");
-        }
+    /**
+     * Configure the embedded LDAP server.
+     *
+     * @throws Exception If the server failed to start for some reason.
+     */
+    private static void setupLdapServer() throws Exception {
+        ldapServer = new InMemoryTDSLDAPServer();
     }
 
     /**
@@ -164,19 +218,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUsersForGroupWithInvalidGroup() {
+    public void getUsersForGroupWithInvalidGroup() throws Exception {
         String group = "invalidGroup";
         Log.info(c, "getUsersForGroupWithInvalidGroup", "Checking with an invalid group.");
-        try {
-            servlet.getUsersForGroup(group, 0);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getUsersForGroup(group, 0);
     }
 
     /**
@@ -208,18 +257,13 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void checkPasswordWithInvalidUser() {
+    public void checkPasswordWithInvalidUser() throws Exception {
         String user = "invalid";
         String password = "testuserpwd";
         Log.info(c, "checkPasswordWithInvalidUser", "Checking good credentials");
-        try {
-            servlet.checkPassword(user, password);
-        } catch (RegistryException e) {
-            // Do you need FFDC here? Remember FFDC instrumentation and @FFDCIgnore
-            e.printStackTrace();
-        }
-        server.waitForStringInLog("CWIML4537E");
-        assertTrue("An invalid user should cause RegistryException with No principal is found message", true);
+
+        assertNull("Authentication should fail.", servlet.checkPassword(user, password));
+        assertNotNull("An invalid user should cause RegistryException with No principal is found message", server.waitForStringInLog("CWIML4537E"));
         //passwordChecker.checkForPasswordInAnyFormat(password);
     }
 
@@ -234,7 +278,7 @@ public class URAPIs_TDSLDAP_SSLTest {
         Log.info(c, "checkPasswordWithBadCredentials", "Checking bad credentials");
         assertNull("Authentication should not succeed.",
                    servlet.checkPassword(user, password));
-        server.waitForStringInLog("CWIML4529E");
+        assertNotNull("Expected CWIML4529E message.", server.waitForStringInLog("CWIML4529E"));
         //passwordChecker.checkForPasswordInAnyFormat(password);
     }
 
@@ -377,21 +421,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUserDisplayNameWithInvalidUser() {
+    public void getUserDisplayNameWithInvalidUser() throws Exception {
         String user = "invalidUser";
         Log.info(c, "getUserDisplayNameWithInvalidUser", "Checking with an invalid user.");
-        try {
-            servlet.getUserDisplayName(user);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid user should cause EntryNotFoundException error CWIML4001E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getUserDisplayName(user);
     }
 
     /**
@@ -412,21 +449,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUniqueUserIdWithInvalidUser() {
+    public void getUniqueUserIdWithInvalidUser() throws Exception {
         String user = "invalidUser";
         Log.info(c, "getUniqueUserIdWithInvalidUser", "Checking with an invalid user.");
-        try {
-            servlet.getUniqueUserId(user);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid user should cause EntryNotFoundException error CWIML4001E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getUniqueUserId(user);
     }
 
     /**
@@ -446,21 +476,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUserSecurityNameWithInvalidUser() {
+    public void getUserSecurityNameWithInvalidUser() throws Exception {
         String user = "cn=invalid,o=ibm,c=us";
         Log.info(c, "getUserSecurityNameWithInvalidUser", "Checking with an invalid user.");
-        try {
-            servlet.getUserSecurityName(user);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4527E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid user should cause EntryNotFoundException error CWIML4527E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4527E");
+
+        servlet.getUserSecurityName(user);
     }
 
     /**
@@ -468,21 +491,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUserSecurityNameWithEntityOutOfRealmScope() {
+    public void getUserSecurityNameWithEntityOutOfRealmScope() throws Exception {
         String user = "uid=invalid";
         Log.info(c, "getUserSecurityNameWithEntityOutOfRealmScope", "Checking with an invalid user.");
-        try {
-            servlet.getUserSecurityName(user);
-        } catch (RegistryException e) {
-            fail("An invalid user should cause RegistryException");
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML0515E")) {
-                assertTrue("An invalid user should cause RegistryException", true);
-            } else {
-                assertTrue("An invalid user should cause RegistryException error CWIML0515E", false);
-            }
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML0515E");
+
+        servlet.getUserSecurityName(user);
     }
 
     /**
@@ -626,21 +642,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getGroupDisplayNameWithInvalidGroup() {
+    public void getGroupDisplayNameWithInvalidGroup() throws Exception {
         String group = "cn=invalidgroup,o=ibm,c=us";
         Log.info(c, "getGroupDisplayNameWithInvalidGroup", "Checking with an invalid group.");
-        try {
-            servlet.getGroupDisplayName(group);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4527E")) {
-                assertTrue("An invalid group should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid group should cause EntryNotFoundException error CWIML4527E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid group should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4527E");
+
+        servlet.getGroupDisplayName(group);
     }
 
     /**
@@ -648,21 +657,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getGroupDisplayNameWithEntityOutOfRealmScope() {
+    public void getGroupDisplayNameWithEntityOutOfRealmScope() throws Exception {
         String group = "cn=invalidgroup";
         Log.info(c, "getGroupDisplayNameWithEntityOutOfRealmScope", "Checking with an invalid group.");
-        try {
-            servlet.getGroupDisplayName(group);
-        } catch (EntryNotFoundException e) {
-            assertTrue("An invalid group should cause RegistryException", false);
-        } catch (RegistryException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML0515E")) {
-                assertTrue("An invalid group should cause RegistryException", true);
-            } else {
-                assertTrue("An invalid group should cause RegistryException error CWIML0515E", false);
-            }
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML0515E");
+
+        servlet.getGroupDisplayName(group);
     }
 
     /**
@@ -682,21 +684,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUniqueGroupIdWithInvalidGroup() {
+    public void getUniqueGroupIdWithInvalidGroup() throws Exception {
         String group = "invalidGroup";
         Log.info(c, "getUniqueGroupIdWithInvalidGroup", "Checking with an invalid group.");
-        try {
-            servlet.getUniqueGroupId(group);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid group should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid group should cause EntryNotFoundException error CWIML4001E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid group should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getUniqueGroupId(group);
     }
 
     /**
@@ -715,21 +710,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getGroupSecurityNameWithInvalidGroup() {
+    public void getGroupSecurityNameWithInvalidGroup() throws Exception {
         String group = "cn=invalid,o=ibm,c=us";
         Log.info(c, "getGroupSecurityNameWithInvalidGroup", "Checking with an invalid group.");
-        try {
-            servlet.getGroupSecurityName(group);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4527E")) {
-                assertTrue("An invalid group should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid group should cause EntryNotFoundException error CWIML4527E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid group should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4527E");
+
+        servlet.getGroupSecurityName(group);
     }
 
     /**
@@ -737,21 +725,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getGroupSecurityNameWithInvalidUniqueName() {
+    public void getGroupSecurityNameWithInvalidUniqueName() throws Exception {
         String group = "invalid";
         Log.info(c, "getGroupSecurityNameWithUniqueName", "Checking with an invalid group.");
-        try {
-            servlet.getGroupSecurityName(group);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid group should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid group should cause EntryNotFoundException error CWIML4001E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid group should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getGroupSecurityName(group);
     }
 
     /**
@@ -759,21 +740,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getGroupSecurityNameWithEntityOutOfRealmScope() {
+    public void getGroupSecurityNameWithEntityOutOfRealmScope() throws Exception {
         String group = "uid=invalid";
         Log.info(c, "getGroupSecurityNameWithUniqueName", "Checking with an invalid group.");
-        try {
-            servlet.getGroupSecurityName(group);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML0515E")) {
-                assertTrue("An invalid group should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid group should cause EntryNotFoundException error CWIML0515E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid group should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML0515E");
+
+        servlet.getGroupSecurityName(group);
     }
 
     /**
@@ -785,7 +759,6 @@ public class URAPIs_TDSLDAP_SSLTest {
         String user = "vmmuser1";
         Log.info(c, "getGroupsForUser", "Checking with a valid user.");
         List<String> list = servlet.getGroupsForUser(user);
-        System.out.println("List of groups : " + list.toString());
         assertTrue(list.contains("vmmgroup1"));
     }
 
@@ -798,7 +771,6 @@ public class URAPIs_TDSLDAP_SSLTest {
         String user = "vmmLibertyUserUID";
         Log.info(c, "getGroupsForDynamicMember", "Checking with a valid user.");
         List<String> list = servlet.getGroupsForUser(user);
-        System.out.println("List of groups : " + list.toString());
         assertTrue(list.contains("dynamicGroup1"));
     }
 
@@ -823,21 +795,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getGroupsForUserWithInvalidUser() {
+    public void getGroupsForUserWithInvalidUser() throws Exception {
         String user = "invalidUser";
         Log.info(c, "getGroupsForUserWithInvalidUser", "Checking with an invalid user.");
-        try {
-            servlet.getGroupsForUser(user);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid user should cause EntryNotFoundException error CWIML4001E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getGroupsForUser(user);
     }
 
     /**
@@ -886,21 +851,14 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUniqueGroupIdsWithInvalidUser() {
+    public void getUniqueGroupIdsWithInvalidUser() throws Exception {
         String user = "uid=invalid,o=ibm,c=us";
         Log.info(c, "getUniqueGroupIdsForUser", "Checking with a valid user.");
-        try {
-            servlet.getUniqueGroupIdsForUser(user);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4527E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid user should cause EntryNotFoundException error CWIML4527E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
+
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4527E");
+
+        servlet.getUniqueGroupIdsForUser(user);
     }
 
     /**
@@ -908,21 +866,13 @@ public class URAPIs_TDSLDAP_SSLTest {
      * This verifies the various required bundles got installed and are working.
      */
     @Test
-    public void getUniqueGroupIdsWithInvalidUniqueName() {
+    public void getUniqueGroupIdsWithInvalidUniqueName() throws Exception {
         String user = "invalid";
         Log.info(c, "getUniqueGroupIdsForUser", "Checking with a valid user.");
-        try {
-            servlet.getUniqueGroupIdsForUser(user);
-        } catch (EntryNotFoundException e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage.contains("CWIML4001E")) {
-                assertTrue("An invalid user should cause EntryNotFoundException", true);
-            } else {
-                assertTrue("An invalid user should cause EntryNotFoundException error CWIML4001E", false);
-            }
-        } catch (RegistryException e) {
-            assertTrue("An invalid user should cause EntryNotFoundException", false);
-        }
-    }
 
+        expectedException.expect(EntryNotFoundException.class);
+        expectedException.expectMessage("CWIML4001E");
+
+        servlet.getUniqueGroupIdsForUser(user);
+    }
 }

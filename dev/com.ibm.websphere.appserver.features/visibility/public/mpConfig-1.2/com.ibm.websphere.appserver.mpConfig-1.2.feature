@@ -14,7 +14,7 @@ Subsystem-Name: MicroProfile Config 1.2
  com.ibm.websphere.appserver.javax.cdi-1.2; ibm.tolerates:=2.0, \
  com.ibm.websphere.appserver.javax.annotation-1.2; ibm.tolerates:=1.3, \
  com.ibm.websphere.appserver.containerServices-1.0
--bundles=com.ibm.ws.require.java8, \
+-bundles=io.openliberty.microprofile.config.internal.common, \
  com.ibm.ws.microprofile.config.1.1, \
  com.ibm.ws.microprofile.config.1.2, \
  com.ibm.ws.microprofile.config.1.2.services, \
@@ -22,3 +22,4 @@ Subsystem-Name: MicroProfile Config 1.2
 kind=ga
 edition=core
 
+WLP-Activation-Type: parallel

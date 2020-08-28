@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2019 IBM Corporation and others.
+ * Copyright (c) 2009, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -20,14 +20,12 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 
-import com.ibm.websphere.channelfw.osgi.CHFWBundle;
 import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
 import com.ibm.ws.http.channel.h2internal.H2InboundLink;
 import com.ibm.ws.http.channel.internal.HttpChannelConfig;
-import com.ibm.ws.http.channel.internal.HttpConfigConstants;
 import com.ibm.ws.http.channel.internal.inbound.HttpInboundChannel;
 import com.ibm.ws.http.channel.internal.inbound.HttpInboundLink;
 import com.ibm.ws.http.channel.internal.inbound.HttpInboundServiceContextImpl;
@@ -583,7 +581,7 @@ public class HttpDispatcherLink extends InboundApplicationLink implements HttpIn
      *
      * @param code
      * @param failure
-     * @param         message/body
+     * @param message/body
      */
     @FFDCIgnore(IOException.class)
     private void sendResponse(StatusCodes code, String detail, Exception failure, boolean addAddress) {
@@ -748,7 +746,7 @@ public class HttpDispatcherLink extends InboundApplicationLink implements HttpIn
 
             if (scheme == null && isc != null && !isc.useForwardedHeaders()) {
                 //if remoteIp is not enabled, still verify for the x-forwarded-proto
-                scheme = request.getHeader(HttpHeaderKeys.HDR_X_FORWARDED_PROTO.getName());
+                scheme = getTrustedHeader(HttpHeaderKeys.HDR_X_FORWARDED_PROTO.getName());
             }
 
             if (scheme == null && request.getHeader(HttpHeaderKeys.HDR_HOST.getName()) != null) {
@@ -1195,7 +1193,6 @@ public class HttpDispatcherLink extends InboundApplicationLink implements HttpIn
             else {
                 HttpInboundLink link = isc.getLink();
                 if (link != null) {
-
                     return link.isHTTP2UpgradeRequest(headers);
                 }
             }
@@ -1210,13 +1207,13 @@ public class HttpDispatcherLink extends InboundApplicationLink implements HttpIn
      * @return false if some error occurred while servicing the upgrade request
      */
     @Override
-    public boolean handleHTTP2UpgradeRequest(Map<String, String> headers) {
+    public boolean handleHTTP2UpgradeRequest(Map<String, String> http2Settings) {
         HttpInboundLink link = isc.getLink();
         HttpInboundChannel channel = link.getChannel();
         VirtualConnection vc = link.getVirtualConnection();
         H2InboundLink h2Link = new H2InboundLink(channel, vc, getTCPConnectionContext());
 
-        boolean upgraded = h2Link.handleHTTP2UpgradeRequest(headers, link);
+        boolean upgraded = h2Link.handleHTTP2UpgradeRequest(http2Settings, link);
         if (upgraded) {
             h2Link.startAsyncRead(true);
         } else {
@@ -1227,11 +1224,10 @@ public class HttpDispatcherLink extends InboundApplicationLink implements HttpIn
         boolean rc = h2Link.getStream(1).waitForConnectionInit();
 
         if (!rc) {
-            if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                Tr.debug(tc, "handleHTTP2UpgradeRequest connection initialization timed out waiting for client");
-            }
+            // A problem occurred with the connection start up, a trace message will be issued from waitForConnectionInit()
             vc.getStateMap().put(h2InitError, true);
         }
+
         return rc;
     }
 

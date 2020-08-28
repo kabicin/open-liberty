@@ -11,9 +11,9 @@
 package mpGraphQL10.defaultvalue;
 
 import org.eclipse.microprofile.graphql.DefaultValue;
-import org.eclipse.microprofile.graphql.InputType;
+import org.eclipse.microprofile.graphql.Input;
 
-@InputType("WidgetInput")
+@Input("WidgetInput")
 public class WidgetInput {
 
     @DefaultValue("Crockpot")
@@ -21,6 +21,7 @@ public class WidgetInput {
     @DefaultValue("5")
     private int quantity;
     private double weight;
+    @DefaultValue("20.4")
     private double length;
     private double height;
     @DefaultValue("10.0")
@@ -61,7 +62,6 @@ public class WidgetInput {
         this.weight = weight;
     }
 
-    @DefaultValue("20.4")
     public double getLength() {
         return length;
     }

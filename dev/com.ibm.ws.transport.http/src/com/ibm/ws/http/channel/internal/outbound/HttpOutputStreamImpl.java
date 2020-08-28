@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009 IBM Corporation and others.
+ * Copyright (c) 2009, 2019 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -222,6 +222,23 @@ public class HttpOutputStreamImpl extends HttpOutputStreamConnectWeb {
 
             throw new IOException("Stream is closed");
         }
+        // There's an H2 timing window where the server could be working on a response, it gets interrupted,
+        // the frame that comes in has an error, and the connection gets shutdown and all resources
+        // including the response are cleaned up.  Then we come back here after the interruption.
+        // Handle this case.
+
+        if ((isc != null) && (isc instanceof HttpInboundServiceContextImpl) &&
+            ((HttpInboundServiceContextImpl) isc).isH2Connection() &&
+            (null == this.isc.getResponse())) {
+            if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                Tr.debug(tc, "validate response is cleaned up hc: " + this.hashCode() + " details: " + this);
+            }
+
+            // Return to clean up the rest of the request/response
+            return;
+
+        }
+
         if (null == this.output) {
             setBufferSize(32768);
         }
@@ -264,7 +281,7 @@ public class HttpOutputStreamImpl extends HttpOutputStreamConnectWeb {
      *
      * @param value
      * @param start - offset into value
-     * @param len - length from that offset to write
+     * @param len   - length from that offset to write
      * @throws IOException
      */
     private void writeToBuffers(byte[] value, int start, int len) throws IOException {
@@ -427,15 +444,29 @@ public class HttpOutputStreamImpl extends HttpOutputStreamConnectWeb {
     @Override
     @FFDCIgnore({ IOException.class })
     public void flushHeaders() throws IOException {
+        // Extra NPE tracing
         if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-            Tr.debug(tc, "flushHeaders: committed=" + this.isc.getResponse().isCommitted());
+            if (null == this.isc) {
+                Tr.debug(tc, "flushHeaders: isc is null");
+            } else if (null == this.isc.getResponse()) {
+                Tr.debug(tc, "flushHeaders: isc.getResponse() is null, isc is " + this.isc);
+            } else {
+                Tr.debug(tc, "flushHeaders: committed=" + this.isc.getResponse().isCommitted(), this.isc, this.isc.getResponse());
+            }
         }
+
+        // Run validate to check if the stream is already closed, if so exit
         validate();
+
         this.ignoreFlush = false;
-        if (!this.isc.getResponse().isCommitted()) {
+        if ((null != this.isc.getResponse()) && !this.isc.getResponse().isCommitted()) {
             this.isc.getResponse().setCommitted();
         } else {
             // response headers already committed (written)
+            // or response has been freed on previous error
+            if (TraceComponent.isAnyTracingEnabled() && tc.isEventEnabled()) {
+                Tr.debug(tc, "Response headers already committed or response cleared; " + this.isc);
+            }
             return;
         }
         try {
@@ -620,7 +651,7 @@ public class HttpOutputStreamImpl extends HttpOutputStreamConnectWeb {
         } else {
             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
                 Tr.debug(tc, "flush hasFinished=true; skipping flushBuffers() on " + this.hashCode() + " details: " + this);
-            }    
+            }
         }
     }
 

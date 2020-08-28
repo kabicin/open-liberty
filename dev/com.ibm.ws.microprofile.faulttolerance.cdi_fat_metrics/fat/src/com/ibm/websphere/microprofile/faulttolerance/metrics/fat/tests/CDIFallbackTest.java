@@ -16,10 +16,10 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import com.ibm.websphere.microprofile.faulttolerance_fat.suite.RepeatFaultTolerance;
 import com.ibm.ws.fat.util.LoggingTest;
 import com.ibm.ws.fat.util.SharedServer;
 import com.ibm.ws.fat.util.browser.WebBrowser;
+import com.ibm.ws.microprofile.faulttolerance.fat.repeat.RepeatFaultTolerance;
 
 import componenttest.custom.junit.runner.FATRunner;
 import componenttest.custom.junit.runner.Mode;
@@ -34,7 +34,8 @@ public class CDIFallbackTest extends LoggingTest {
     public static SharedServer SHARED_SERVER = new SharedServer("CDIFaultToleranceMetrics");
 
     @ClassRule
-    public static RepeatTests rep = RepeatFaultTolerance.repeatAll(SHARED_SERVER.getServerName());
+    public static RepeatTests rep = RepeatFaultTolerance.repeatAll(SHARED_SERVER.getServerName())
+                    .andWith(RepeatFaultTolerance.ft11metrics20Features(SHARED_SERVER.getServerName()));
 
     @Test
     public void testFallback() throws Exception {

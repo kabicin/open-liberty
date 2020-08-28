@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017 IBM Corporation and others.
+ * Copyright (c) 2017, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -38,19 +38,17 @@ import com.ibm.jbatch.container.RASConstants;
 import com.ibm.jbatch.container.context.impl.MetricImpl;
 import com.ibm.jbatch.container.exception.BatchIllegalJobStatusTransitionException;
 import com.ibm.jbatch.container.exception.PersistenceException;
-import com.ibm.jbatch.container.execution.impl.RuntimePartitionExecution;
 import com.ibm.jbatch.container.execution.impl.RuntimeSplitFlowExecution;
 import com.ibm.jbatch.container.execution.impl.RuntimeStepExecution;
 import com.ibm.jbatch.container.persistence.jpa.JobExecutionEntity;
 import com.ibm.jbatch.container.persistence.jpa.JobInstanceEntity;
-import com.ibm.jbatch.container.persistence.jpa.RemotablePartitionEntity;
-import com.ibm.jbatch.container.persistence.jpa.RemotablePartitionKey;
 import com.ibm.jbatch.container.persistence.jpa.RemotableSplitFlowEntity;
 import com.ibm.jbatch.container.persistence.jpa.RemotableSplitFlowKey;
 import com.ibm.jbatch.container.persistence.jpa.StepThreadExecutionEntity;
 import com.ibm.jbatch.container.persistence.jpa.TopLevelStepExecutionEntity;
 import com.ibm.jbatch.container.services.IPersistenceManagerService;
 import com.ibm.jbatch.container.ws.InstanceState;
+import com.ibm.jbatch.container.ws.JobInstanceNotQueuedException;
 import com.ibm.jbatch.container.ws.WSStepThreadExecutionAggregate;
 
 /**
@@ -149,7 +147,7 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
     }
 
     @Override
-    public JobInstanceEntity updateJobInstanceStateOnConsumed(long instanceId) throws BatchIllegalJobStatusTransitionException {
+    public JobInstanceEntity updateJobInstanceStateOnConsumed(long instanceId) throws BatchIllegalJobStatusTransitionException, JobInstanceNotQueuedException {
         JobInstanceEntity retVal = getJobInstance(instanceId);
 
         InstanceState currentState = retVal.getInstanceState();
@@ -226,8 +224,8 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
      * @param stepExecutionId
      * @return
      * @throws IllegalArgumentException if either:
-     *             1) we have no entry at all with id equal to <code>stepExecutionId</code>
-     *             2) we have a partition-level StepThreadExecutionEntity with this id (but not a top-level entry).
+     *                                      1) we have no entry at all with id equal to <code>stepExecutionId</code>
+     *                                      2) we have a partition-level StepThreadExecutionEntity with this id (but not a top-level entry).
      */
     @Override
     public TopLevelStepExecutionEntity getStepExecutionTopLevel(long stepExecutionId) throws IllegalArgumentException {
@@ -300,9 +298,6 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
             throw new PersistenceException(e);
         }
         updateStepExecutionMetrics(stepExec, runtimeStepExecution.getMetrics());
-
-        // Note there's nothing in the spec that says we have to do this, but seems useful.
-        stepExec.getJobExecution().setLastUpdatedTime(runtimeStepExecution.getLastUpdatedTime());
     }
 
     private void updateStepExecutionMetrics(StepThreadExecutionEntity stepData, List<Metric> metrics) {
@@ -351,25 +346,6 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
         return null;
     }
 
-    @Override
-    public RemotablePartitionEntity createPartitionExecution(
-                                                             RemotablePartitionKey partitionKey, Date createTime) {
-        return null;
-    }
-
-    @Override
-    public RemotablePartitionEntity updatePartitionExecution(
-                                                             RuntimePartitionExecution runtimePartitionExecution,
-                                                             BatchStatus newBatchStatus, Date date) {
-        return null;
-    }
-
-    @Override
-    public RemotablePartitionEntity updatePartitionExecutionLogDir(
-                                                                   RemotablePartitionKey key, String logDirPath) {
-        return null;
-    }
-
     /**
      * TODO - The 'verify' methods that follow are a basic ground work to guard against the invalid transition of job Batch Status / instance State.
      * For now we are only disallowing updates once batch status or instance state are marked 'COMPLETED'/'ABANDONED'.
@@ -392,11 +368,6 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
                 throw new BatchIllegalJobStatusTransitionException("Job execution: " + exec.getExecutionId()
                                                                    + " cannot be transitioned from Batch Status: " + exec.getBatchStatus().name()
                                                                    + " to " + toStatus.name());
-            case STARTING:
-            case STARTED:
-            case STOPPING:
-            case FAILED:
-
             default:
         }
 
@@ -421,11 +392,6 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
                 throw new BatchIllegalJobStatusTransitionException("Job instance: " + instance.getInstanceId()
                                                                    + " cannot be transitioned from Batch Status: " + instance.getBatchStatus().name()
                                                                    + " to " + toStatus.name());
-            case STARTING:
-            case STARTED:
-            case STOPPING:
-            case FAILED:
-
             default:
         }
 
@@ -451,11 +417,6 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
                 throw new BatchIllegalJobStatusTransitionException("Job Step Thread execution: " + stepExec.getStepExecutionId()
                                                                    + " cannot be transitioned from Batch Status: " + stepExec.getBatchStatus().name()
                                                                    + " to " + toStatus.name());
-            case STARTING:
-            case STARTED:
-            case STOPPING:
-            case FAILED:
-
             default:
         }
 
@@ -481,12 +442,6 @@ public abstract class AbstractPersistenceManager implements IPersistenceManagerS
                 throw new BatchIllegalJobStatusTransitionException("Job Instance: " + jobInstance.getInstanceId()
                                                                    + " cannot be transitioned from Instance State: " + jobInstance.getInstanceState().name()
                                                                    + " to " + toState.name());
-            case SUBMITTED:
-            case JMS_QUEUED:
-            case JMS_CONSUMED:
-            case DISPATCHED:
-            case FAILED:
-            case STOPPED:
             default:
         }
 

@@ -22,14 +22,17 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import com.ibm.websphere.simplicity.config.KeyStore;
+import com.ibm.websphere.simplicity.config.ORB;
 import com.ibm.websphere.simplicity.config.ServerConfiguration;
 
+import componenttest.annotation.MaximumJavaLevel;
 import componenttest.custom.junit.runner.FATRunner;
 import componenttest.custom.junit.runner.Mode;
 import componenttest.topology.utils.HttpUtils;
 
 @Mode(FULL)
 @RunWith(FATRunner.class)
+@MaximumJavaLevel(javaLevel = 8)
 public class JavaeeFeatureTests15 extends AbstractSpringTests {
     @AfterClass
     public static void stopTestServer() throws Exception {
@@ -53,6 +56,10 @@ public class JavaeeFeatureTests15 extends AbstractSpringTests {
 
     @Override
     public void modifyServerConfiguration(ServerConfiguration config) {
+        ORB orb = config.getOrb();
+        orb.setId("defaultOrb");
+        orb.setOrbSSLInitTimeout("30");
+
         List<KeyStore> keystores = config.getKeyStores();
         keystores.clear();
 

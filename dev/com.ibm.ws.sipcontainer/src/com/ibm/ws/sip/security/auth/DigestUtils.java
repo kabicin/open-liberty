@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2008, 2009 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -369,7 +369,7 @@ public class DigestUtils {
 					cnonce, uri, algorithm, sipMethod, body});        	
 		}
         MessageDigest digester = ThreadLocalStorage.getMessageDigest();
-        if (algorithm.equals(DigestConstants.ALG_MD5_SESS)) {
+        if (algorithm != null && algorithm.equals(DigestConstants.ALG_MD5_SESS)) {
         	String A1 = createA1MD5Sess(ha1, nonce, cnonce, digester);
 			ha1 = textDigest(A1, digester);
 		}

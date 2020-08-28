@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2014, 2019 IBM Corporation and others.
+ * Copyright (c) 2014, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,8 +12,11 @@ package com.ibm.ws.concurrent.persistent.db;
 
 import java.security.AccessController;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.SQLTimeoutException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -24,9 +27,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.persistence.EntityExistsException;
 import javax.persistence.EntityManager;
 import javax.persistence.LockModeType;
+import javax.persistence.LockTimeoutException;
 import javax.persistence.PersistenceException;
+import javax.persistence.PessimisticLockException;
 import javax.persistence.Query;
+import javax.persistence.QueryTimeoutException;
 import javax.persistence.TypedQuery;
+
+import org.eclipse.persistence.platform.database.DatabasePlatform;
 
 import com.ibm.websphere.concurrent.persistent.PersistentExecutor;
 import com.ibm.websphere.concurrent.persistent.TaskState;
@@ -70,6 +78,7 @@ public class DatabaseTaskStore implements TaskStore {
      * Persistence service unit. Must use the init/destroy lock to determine if lazy initialization is needed.
      */
     private PersistenceServiceUnit persistenceServiceUnit;
+    private PersistenceServiceUnit persistenceServiceUnitReadUncommitted; // TRANSACTION_READ_UNCOMMITTED
 
     private DatabaseTaskStore(DatabaseStore dbStore) {
         this.dbStore = dbStore;
@@ -111,6 +120,12 @@ public class DatabaseTaskStore implements TaskStore {
             } catch (Throwable x) {
                 // auto FFDC
             } finally {
+                try {
+                    if (removed.persistenceServiceUnitReadUncommitted != null)
+                        removed.persistenceServiceUnitReadUncommitted.close();
+                } catch (Throwable x) {
+                    // auto FFDC
+                }
                 removed.lock.writeLock().unlock();
             }
         }
@@ -195,9 +210,9 @@ public class DatabaseTaskStore implements TaskStore {
     /** {@inheritDoc} */
     @Override
     public int cancel(String pattern, Character escape, TaskState state, boolean inState, String owner) throws Exception {
-        StringBuilder update = new StringBuilder(133).append("UPDATE Task t SET t.STATES=")
+        StringBuilder update = new StringBuilder(155).append("UPDATE Task t SET t.STATES=")
                         .append(TaskState.CANCELED.bit + TaskState.ENDED.bit)
-                        .append(" WHERE t.STATES<")
+                        .append(",t.VERSION=t.VERSION+1 WHERE t.STATES<")
                         .append(TaskState.ENDED.bit); // cannot cancel already-ended tasks
         if (owner != null)
             update.append(" AND t.OWNR=:o");
@@ -276,13 +291,39 @@ public class DatabaseTaskStore implements TaskStore {
             em.persist(property);
             em.flush();
         } catch (EntityExistsException x) {
-            return false;
+            /*
+             * FIXME JPA Spec says em.persist can throw EntityExistsException if entity already exists.
+             * EclipseLink implementation chooses to throw PersistanceException during the flush operation.
+             * If EclipseLink changes behavior or another JPA Impl is used, this exception will notify the JPA
+             * team so that we can update this code path, and remove extraneous PersistenceException checks.
+             */
+            throw new UnsupportedOperationException("EntityExistsException indicates that additional or alternative "
+                                                    + "function has been added.", x);
         } catch (PersistenceException x) {
             // Some JPA providers may throw PersistenceException for some scenarios where it can be
             // determined the row really does exist; handle those here
-            if (x.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                return false;
+
+            //TODO remove later if EntityExistsException starts being thrown
+            Throwable cause = x.getCause();
+            while (cause != null) {
+                if (cause instanceof SQLIntegrityConstraintViolationException)
+                    return false;
+                if (cause instanceof SQLException) {
+                    SQLException sqle = (SQLException) cause;
+                    String sqlState = sqle.getSQLState();
+
+                    //SQL State 23xxx also indicates an integrity constraint violation
+                    if (sqlState != null && sqlState.length() == 5 && sqlState.startsWith("23")) {
+                        if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                            Tr.debug(tc, "createProperty", sqle.getMessage(), sqlState, sqle.getErrorCode());
+                        }
+                        return false;
+                    }
+                }
+                cause = cause.getCause(); //Eventually will return null when end of exceptions stack is reached.
             }
+
+            //Final effort to try and find property
             try {
                 em.detach(property); // ensure em.find won't return object from cache
                 if (em.find(Property.class, name) != null) {
@@ -305,7 +346,7 @@ public class DatabaseTaskStore implements TaskStore {
     /** {@inheritDoc} */
     @Override
     public List<PartitionRecord> find(PartitionRecord expected) throws Exception {
-        StringBuilder select = new StringBuilder(172).append("SELECT p.EXECUTOR,p.HOSTNAME,p.ID,p.LSERVER,p.USERDIR FROM Partition p");
+        StringBuilder select = new StringBuilder(190).append("SELECT p.EXECUTOR,p.HOSTNAME,p.ID,p.LSERVER,p.USERDIR,p.EXPIRY,p.STATES FROM Partition p");
         if (expected != null) {
             select.append(" WHERE");
             if (expected.hasExecutor())
@@ -352,6 +393,8 @@ public class DatabaseTaskStore implements TaskStore {
                 record.setId((Long) result[2]);
                 record.setLibertyServer((String) result[3]);
                 record.setUserDir((String) result[4]);
+                record.setExpiry((Long) result[5]);
+                record.setStates((Long) result[6]);
                 records.add(record);
             }
         } finally {
@@ -365,9 +408,12 @@ public class DatabaseTaskStore implements TaskStore {
 
     /** {@inheritDoc} */
     @Override
-    public TaskRecord find(long taskId, long partitionId, long maxNextExecTime, boolean forUpdate) throws Exception {
-        StringBuilder find = new StringBuilder(237)
-                        .append("SELECT t.LOADER,t.OWNR,t.MBITS,t.INAME,t.NEXTEXEC,t.ORIGSUBMT,t.PREVSCHED,t.PREVSTART,t.PREVSTOP,t.RESLT,t.RFAILS,t.STATES,t.TASKB,t.TASKINFO,t.TRIG,t.VERSION FROM Task t WHERE t.ID=:i AND t.PARTN=:p AND t.STATES<")
+    public TaskRecord find(long taskId, Long partitionId, long maxNextExecTime, boolean forUpdate) throws Exception {
+        StringBuilder find = new StringBuilder(245)
+                        .append("SELECT t.LOADER,t.OWNR,t.PARTN,t.MBITS,t.INAME,t.NEXTEXEC,t.ORIGSUBMT,t.PREVSCHED,t.PREVSTART,t.PREVSTOP,t.RESLT,t.RFAILS,t.STATES,t.TASKB,t.TASKINFO,t.TRIG,t.VERSION FROM Task t WHERE t.ID=:i");
+        if (partitionId != null)
+            find.append(" AND t.PARTN=:p");
+        find.append(" AND t.STATES<")
                         .append(TaskState.SUSPENDED.bit)
                         .append(" AND t.NEXTEXEC<=:m");
 
@@ -381,7 +427,8 @@ public class DatabaseTaskStore implements TaskStore {
             if (forUpdate)
                 query.setLockMode(LockModeType.PESSIMISTIC_WRITE);
             query.setParameter("i", taskId);
-            query.setParameter("p", partitionId);
+            if (partitionId != null)
+                query.setParameter("p", partitionId);
             query.setParameter("m", maxNextExecTime);
             List<Object[]> resultList = query.getResultList();
             if (resultList.isEmpty()) {
@@ -395,21 +442,21 @@ public class DatabaseTaskStore implements TaskStore {
             taskRecord.setId(taskId);
             taskRecord.setIdentifierOfClassLoader((String) result[0]);
             taskRecord.setIdentifierOfOwner((String) result[1]);
-            taskRecord.setIdentifierOfPartition(partitionId);
-            taskRecord.setMiscBinaryFlags((Short) result[2]);
-            taskRecord.setName((String) result[3]);
-            taskRecord.setNextExecutionTime((Long) result[4]);
-            taskRecord.setOriginalSubmitTime((Long) result[5]);
-            taskRecord.setPreviousScheduledStartTime((Long) result[6]);
-            taskRecord.setPreviousStartTime((Long) result[7]);
-            taskRecord.setPreviousStopTime((Long) result[8]);
-            taskRecord.setResult((byte[]) result[9]);
-            taskRecord.setConsecutiveFailureCount((Short) result[10]);
-            taskRecord.setState((Short) result[11]);
-            taskRecord.setTask((byte[]) result[12]);
-            taskRecord.setTaskInformation((byte[]) result[13]);
-            taskRecord.setTrigger((byte[]) result[14]);
-            taskRecord.setVersion((Integer) result[15]);
+            taskRecord.setClaimExpiryOrPartition((Long) result[2]);
+            taskRecord.setMiscBinaryFlags((Short) result[3]);
+            taskRecord.setName((String) result[4]);
+            taskRecord.setNextExecutionTime((Long) result[5]);
+            taskRecord.setOriginalSubmitTime((Long) result[6]);
+            taskRecord.setPreviousScheduledStartTime((Long) result[7]);
+            taskRecord.setPreviousStartTime((Long) result[8]);
+            taskRecord.setPreviousStopTime((Long) result[9]);
+            taskRecord.setResult((byte[]) result[10]);
+            taskRecord.setConsecutiveFailureCount((Short) result[11]);
+            taskRecord.setState((Short) result[12]);
+            taskRecord.setTask((byte[]) result[13]);
+            taskRecord.setTaskInformation((byte[]) result[14]);
+            taskRecord.setTrigger((byte[]) result[15]);
+            taskRecord.setVersion((Integer) result[16]);
 
             if (trace && tc.isEntryEnabled())
                 Tr.exit(this, tc, "find", taskRecord);
@@ -471,79 +518,122 @@ public class DatabaseTaskStore implements TaskStore {
 
     /** {@inheritDoc} */
     @Override
-    public List<Object[]> findLateTasks(long maxNextExecTime, long excludePartition, Integer maxResults) throws Exception {
-        StringBuilder find = new StringBuilder(138)
-                        .append("SELECT t.ID,t.MBITS,t.NEXTEXEC,t.TXTIMEOUT,t.VERSION FROM Task t WHERE t.PARTN<>:p AND t.STATES<")
-                        .append(TaskState.SUSPENDED.bit)
-                        .append(" AND t.NEXTEXEC<=:m");
-        if (maxResults != null)
-            find.append(" ORDER BY t.NEXTEXEC");
-
-        final boolean trace = TraceComponent.isAnyTracingEnabled();
-        if (trace && tc.isEntryEnabled())
-            Tr.entry(this, tc, "findLateTasks", Utils.appendDate(new StringBuilder(30), maxNextExecTime), excludePartition, maxResults, find);
-
-        List<Object[]> resultList;
-        EntityManager em = getPersistenceServiceUnit().createEntityManager();
-        try {
-            Connection con = em.unwrap(Connection.class);
-            if (con == null)
-                // TODO why does this sometimes return null when running in builds?
-                System.out.println("em.unwrap(Connection) returned null! em = " + em);
-            else
-                con.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED); // TODO: jdbc driver might not support this
-
-            TypedQuery<Object[]> query = em.createQuery(find.toString(), Object[].class);
-            query.setParameter("p", excludePartition);
-            query.setParameter("m", maxNextExecTime);
-            if (maxResults != null)
-                query.setMaxResults(maxResults);
-            List<Object[]> results = query.getResultList();
-            resultList = results;
-        } finally {
-            em.close();
-        }
-
-        if (trace && tc.isEntryEnabled())
-            Tr.exit(this, tc, "findLateTasks", resultList.size());
-        return resultList;
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public long findOrCreate(PartitionRecord record) throws Exception {
-        String find = "SELECT p.ID FROM Partition p WHERE p.EXECUTOR=:x AND p.HOSTNAME=:h AND p.LSERVER=:l AND p.USERDIR=:u";
+        String find = "SELECT p.ID,p.EXPIRY,p.STATES FROM Partition p WHERE p.EXECUTOR=:x AND p.HOSTNAME=:h AND p.LSERVER=:l AND p.USERDIR=:u";
 
         final boolean trace = TraceComponent.isAnyTracingEnabled();
         if (trace && tc.isEntryEnabled())
             Tr.entry(this, tc, "findOrCreate", record, find);
 
-        Long result;
+        long partitionId;
         EntityManager em = getPersistenceServiceUnit().createEntityManager();
         try {
             // First look for an existing entry
-            TypedQuery<Long> query = em.createQuery(find, Long.class);
+            TypedQuery<Object[]> query = em.createQuery(find, Object[].class);
             query.setParameter("x", record.getExecutor());
             query.setParameter("h", record.getHostName());
             query.setParameter("l", record.getLibertyServer());
             query.setParameter("u", record.getUserDir());
-            List<Long> results = query.getResultList();
-            if (results.size() > 0)
-                result = results.get(0);
-            else {
+            List<Object[]> results = query.getResultList();
+            if (results.size() > 0) {
+                Object[] r = results.get(0);
+                partitionId = (Long) r[0];
+                long expiry = (Long) r[1];
+                long states = (Long) r[2];
+                // Check if existing entry needs an update to expiry or states
+                if (record.hasExpiry() && record.getExpiry() != expiry
+                    || record.hasStates() && record.getStates() != states) {
+                    long newExpiry = record.hasExpiry() ? record.getExpiry() : expiry;
+                    long newStates = record.hasStates() ? record.getStates() : states;
+                    Query update = em.createQuery("UPDATE Partition SET EXPIRY=:e, STATES=:s WHERE ID=:i");
+                    update.setParameter("e", newExpiry);
+                    update.setParameter("s", newStates);
+                    update.setParameter("i", partitionId);
+                    int count = update.executeUpdate();
+                    if (trace && tc.isDebugEnabled())
+                        Tr.debug(this, tc, "update", expiry + " --> " + newExpiry, states + " --> " + newStates, count);
+                }
+            } else {
                 // If not found, create a new entry
                 Partition partition = new Partition(record);
                 em.persist(partition);
                 em.flush();
-                result = partition.ID;
+                partitionId = partition.ID;
             }
         } finally {
             em.close();
         }
 
         if (trace && tc.isEntryEnabled())
-            Tr.exit(this, tc, "findOrCreate", result);
-        return result;
+            Tr.exit(this, tc, "findOrCreate", partitionId);
+        return partitionId;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public long findOrCreatePollPartition() throws Exception {
+        String find = "SELECT p.ID FROM Partition p WHERE p.LSERVER=:s";
+
+        final boolean trace = TraceComponent.isAnyTracingEnabled();
+        if (trace && tc.isEntryEnabled())
+            Tr.entry(this, tc, "findOrCreatePollPartition", find);
+
+        long partitionId;
+        EntityManager em = getPersistenceServiceUnit().createEntityManager();
+        try {
+            // First look for an existing entry
+            TypedQuery<Long> query = em.createQuery(find, Long.class);
+            query.setParameter("s", ".pollinfo"); // prefix of . is used to avoid collision with actual Liberty server names
+            List<Long> results = query.getResultList();
+            if (results.size() > 0) {
+                partitionId = results.get(0);
+            } else {
+                // If not found, create a new entry
+                Partition partition = new Partition();
+                // Initialize to already-expired and eligible for any server to claim.
+                // Use a fractional second to help avoid accessing the database around the same time as scheduled tasks
+                // which might be scheduled to run on the hour or minute.
+                partition.EXPIRY = System.currentTimeMillis() / 1000 * 1000 + 600;
+                partition.STATES = partition.EXPIRY; // used as a last-updated timestamp
+                partition.LSERVER = ".pollinfo";
+                partition.EXECUTOR = ""; // unused, cannot be null
+                partition.HOSTNAME = ""; // unused, cannot be null
+                partition.USERDIR = ""; // unused, cannot be null
+                em.persist(partition);
+                em.flush();
+                partitionId = partition.ID;
+            }
+        } finally {
+            em.close();
+        }
+
+        if (trace && tc.isEntryEnabled())
+            Tr.exit(this, tc, "findOrCreatePollPartition", partitionId);
+        return partitionId;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Object[] findPollInfoForUpdate(long partitionId) throws Exception {
+        String find = "SELECT p.EXPIRY,p.STATES FROM Partition p WHERE p.ID=:i";
+
+        final boolean trace = TraceComponent.isAnyTracingEnabled();
+        if (trace && tc.isEntryEnabled())
+            Tr.entry(this, tc, "findPollInfoForUpdate", partitionId, find);
+
+        EntityManager em = getPersistenceServiceUnit().createEntityManager();
+        try {
+            TypedQuery<Object[]> query = em.createQuery(find, Object[].class);
+            query.setLockMode(LockModeType.PESSIMISTIC_WRITE);
+            query.setParameter("i", partitionId);
+            Object[] result = query.getSingleResult();
+
+            if (trace && tc.isEntryEnabled())
+                Tr.exit(this, tc, "findPollInfoForUpdate", Arrays.toString(result));
+            return result;
+        } finally {
+            em.close();
+        }
     }
 
     /** {@inheritDoc} */
@@ -682,6 +772,40 @@ public class DatabaseTaskStore implements TaskStore {
 
     /** {@inheritDoc} */
     @Override
+    public List<Object[]> findUnclaimedTasks(long maxNextExecTime, Integer maxResults) throws Exception {
+        StringBuilder find = new StringBuilder(161)
+                        .append("SELECT t.ID,t.MBITS,t.NEXTEXEC,t.TXTIMEOUT,t.VERSION FROM Task t WHERE t.STATES<")
+                        .append(TaskState.SUSPENDED.bit)
+                        .append(" AND t.NEXTEXEC<=:m AND t.PARTN<:c");
+        if (maxResults != null)
+            find.append(" ORDER BY t.NEXTEXEC");
+
+        final boolean trace = TraceComponent.isAnyTracingEnabled();
+        if (trace && tc.isEntryEnabled())
+            Tr.entry(this, tc, "findUnclaimedTasks", Utils.appendDate(new StringBuilder(30), maxNextExecTime), maxResults, find);
+
+        List<Object[]> resultList;
+        EntityManager em = getPersistenceServiceUnitReadUncommitted().createEntityManager();
+        try {
+            TypedQuery<Object[]> query = em.createQuery(find.toString(), Object[].class);
+            query.setParameter("m", maxNextExecTime);
+            query.setParameter("c", System.currentTimeMillis());
+            if (maxResults != null)
+                query.setMaxResults(maxResults);
+
+            List<Object[]> results = query.getResultList();
+            resultList = results;
+        } finally {
+            em.close();
+        }
+
+        if (trace && tc.isEntryEnabled())
+            Tr.exit(this, tc, "findUnclaimedTasks", resultList.size());
+        return resultList;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public List<Object[]> findUpcomingTasks(long partition, long maxNextExecTime, Integer maxResults) throws Exception {
         StringBuilder find = new StringBuilder(129)
                         .append("SELECT t.ID,t.MBITS,t.NEXTEXEC,t.TXTIMEOUT FROM Task t WHERE t.PARTN=:p AND t.STATES<")
@@ -751,11 +875,43 @@ public class DatabaseTaskStore implements TaskStore {
         return taskRecord;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public Long getPartition(long taskId) throws Exception {
+        String find = "SELECT t.PARTN FROM Task t WHERE t.ID=:i";
+
+        final boolean trace = TraceComponent.isAnyTracingEnabled();
+        if (trace && tc.isEntryEnabled())
+            Tr.entry(this, tc, "getPartition", taskId, find);
+
+        List<Object[]> resultList;
+        EntityManager em = getPersistenceServiceUnit().createEntityManager();
+        try {
+            TypedQuery<Object[]> query = em.createQuery(find.toString(), Object[].class);
+            query.setParameter("i", taskId);
+            resultList = query.getResultList();
+        } finally {
+            em.close();
+        }
+
+        Long partitionId;
+        if (resultList.isEmpty())
+            partitionId = null;
+        else {
+            Object[] result = resultList.get(0);
+            partitionId = (Long) result[0];
+        }
+
+        if (trace && tc.isEntryEnabled())
+            Tr.exit(this, tc, "getPartition", partitionId);
+        return partitionId;
+    }
+
     /**
      * Returns the persistence service unit, lazily initializing if necessary.
      *
      * @return the persistence service unit.
-     * @throws Exceptin              if an error occurs.
+     * @throws Exception             if an error occurs.
      * @throws IllegalStateException if this instance has been destroyed.
      */
     public final PersistenceServiceUnit getPersistenceServiceUnit() throws Exception {
@@ -782,6 +938,58 @@ public class DatabaseTaskStore implements TaskStore {
                 }
             }
             return persistenceServiceUnit;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Returns the persistence service unit with TRANSACTION_READ_COMMITTED isolation, lazily initializing if necessary.
+     *
+     * @return the persistence service unit.
+     * @throws Exception             if an error occurs.
+     * @throws IllegalStateException if this instance has been destroyed.
+     */
+    public final PersistenceServiceUnit getPersistenceServiceUnitReadUncommitted() throws Exception {
+        lock.readLock().lock();
+        try {
+            if (destroyed)
+                throw new IllegalStateException();
+            if (persistenceServiceUnitReadUncommitted == null) {
+                // Switch to write lock for lazy initialization
+                lock.readLock().unlock();
+                lock.writeLock().lock();
+                try {
+                    if (destroyed)
+                        throw new IllegalStateException();
+                    if (persistenceServiceUnitReadUncommitted == null) {
+                        persistenceServiceUnitReadUncommitted = dbStore.createPersistenceServiceUnit(priv.getClassLoader(Task.class),
+                                                                                                     Task.class.getName());
+                        EntityManager em = persistenceServiceUnitReadUncommitted.createEntityManager();
+                        // This seems to apply to every subsequent usage of the persistence service unit. Can we rely on that?
+                        Object dbSession = em.getClass().getMethod("getDatabaseSession").invoke(em);
+
+                        // TODO is there a more efficient way to detect Oracle that doesn't require obtaining an extra connection?
+                        DatabasePlatform dbPlatform = (DatabasePlatform) dbSession.getClass().getMethod("getPlatform").invoke(dbSession);
+                        if (dbPlatform.isOracle() || dbPlatform.isOracle9()) {
+                            em.close();
+                            persistenceServiceUnitReadUncommitted.close();
+                            persistenceServiceUnitReadUncommitted = getPersistenceServiceUnit();
+                        } else {
+                            org.eclipse.persistence.sessions.DatabaseLogin dbLogin = (org.eclipse.persistence.sessions.DatabaseLogin) dbSession.getClass()
+                                            .getMethod("getDatasourceLogin")
+                                            .invoke(dbSession);
+                            dbLogin.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+                            em.close();
+                        }
+                    }
+                } finally {
+                    // Downgrade to read lock for rest of method
+                    lock.readLock().lock();
+                    lock.writeLock().unlock();
+                }
+            }
+            return persistenceServiceUnitReadUncommitted;
         } finally {
             lock.readLock().unlock();
         }
@@ -884,7 +1092,7 @@ public class DatabaseTaskStore implements TaskStore {
     /** {@inheritDoc} */
     @Override
     public short incrementFailureCount(long taskId) throws Exception {
-        String update = "UPDATE Task t SET t.RFAILS=t.RFAILS+1 WHERE t.ID=:i AND t.RFAILS<" + Short.MAX_VALUE;
+        String update = "UPDATE Task t SET t.RFAILS=t.RFAILS+1,t.VERSION=t.VERSION+1 WHERE t.ID=:i AND t.RFAILS<" + Short.MAX_VALUE;
         String find = "SELECT t.RFAILS FROM Task t WHERE t.ID=:i";
         final boolean trace = TraceComponent.isAnyTracingEnabled();
         if (trace && tc.isEntryEnabled())
@@ -909,77 +1117,6 @@ public class DatabaseTaskStore implements TaskStore {
         return consecutiveFailureCount;
     }
 
-    /** {@inheritDoc} */
-    @Override
-    public int persist(PartitionRecord updates, PartitionRecord expected) throws Exception {
-        StringBuilder update = new StringBuilder(160)
-                        .append("UPDATE Partition SET ");
-        if (updates.hasExecutor())
-            update.append("EXECUTOR=:x2,");
-        if (updates.hasHostName())
-            update.append("HOSTNAME=:h2,");
-        if (updates.hasId())
-            update.append("ID=:i2,");
-        if (updates.hasLibertyServer())
-            update.append("LSERVER=:l2,");
-        if (updates.hasUserDir())
-            update.append("USERDIR=:u2,");
-        update.setCharAt(update.length() - 1, ' ');
-
-        update.append("WHERE");
-        if (expected.hasExecutor())
-            update.append(" EXECUTOR=:x1 AND");
-        if (expected.hasHostName())
-            update.append(" HOSTNAME=:h1 AND");
-        if (expected.hasId())
-            update.append(" ID=:i1 AND");
-        if (expected.hasLibertyServer())
-            update.append(" LSERVER=:l1 AND");
-        if (expected.hasUserDir())
-            update.append(" USERDIR=:u1 AND");
-        int length = update.length();
-        update.delete(length - (update.charAt(length - 1) == 'E' ? 6 : 4), length);
-
-        final boolean trace = TraceComponent.isAnyTracingEnabled();
-        if (trace && tc.isEntryEnabled())
-            Tr.entry(this, tc, "persist", updates, expected, update);
-
-        EntityManager em = getPersistenceServiceUnit().createEntityManager();
-        try {
-            Query query = em.createQuery(update.toString());
-
-            if (updates.hasExecutor())
-                query.setParameter("x2", updates.getExecutor());
-            if (updates.hasHostName())
-                query.setParameter("h2", updates.getHostName());
-            if (updates.hasId())
-                query.setParameter("i2", updates.getId());
-            if (updates.hasLibertyServer())
-                query.setParameter("l2", updates.getLibertyServer());
-            if (updates.hasUserDir())
-                query.setParameter("u2", updates.getUserDir());
-
-            if (expected.hasExecutor())
-                query.setParameter("x1", expected.getExecutor());
-            if (expected.hasHostName())
-                query.setParameter("h1", expected.getHostName());
-            if (expected.hasId())
-                query.setParameter("i1", expected.getId());
-            if (expected.hasLibertyServer())
-                query.setParameter("l1", expected.getLibertyServer());
-            if (expected.hasUserDir())
-                query.setParameter("u1", expected.getUserDir());
-
-            int count = query.executeUpdate();
-
-            if (trace && tc.isEntryEnabled())
-                Tr.exit(this, tc, "persist", count);
-            return count;
-        } finally {
-            em.close();
-        }
-    }
-
     /**
      * Persist updates to a task record in the persistent store.
      *
@@ -997,7 +1134,7 @@ public class DatabaseTaskStore implements TaskStore {
                 update.append("t.LOADER=:c2,");
             if (updates.hasIdentifierOfOwner())
                 update.append("t.OWNR=:o2,");
-            if (updates.hasIdentifierOfPartition())
+            if (updates.hasClaimExpiryOrPartition())
                 update.append("t.PARTN=:p2,");
             if (updates.hasMiscBinaryFlags())
                 update.append("t.MBITS=:m2,");
@@ -1033,7 +1170,7 @@ public class DatabaseTaskStore implements TaskStore {
             update.append(" AND t.LOADER=:c1");
         if (expected.hasIdentifierOfOwner())
             update.append(" AND t.OWNR=:o1");
-        if (expected.hasIdentifierOfPartition())
+        if (expected.hasClaimExpiryOrPartition())
             update.append(" AND t.PARTN=:p1");
         if (expected.hasMiscBinaryFlags())
             update.append(" AND t.MBITS=:m1");
@@ -1077,8 +1214,8 @@ public class DatabaseTaskStore implements TaskStore {
                     query.setParameter("c2", updates.getIdentifierOfClassLoader());
                 if (updates.hasIdentifierOfOwner())
                     query.setParameter("o2", updates.getIdentifierOfOwner());
-                if (updates.hasIdentifierOfPartition())
-                    query.setParameter("p2", updates.getIdentifierOfPartition());
+                if (updates.hasClaimExpiryOrPartition())
+                    query.setParameter("p2", updates.getClaimExpiryOrPartition());
                 if (updates.hasMiscBinaryFlags())
                     query.setParameter("m2", updates.getMiscBinaryFlags());
                 if (updates.hasName())
@@ -1113,8 +1250,8 @@ public class DatabaseTaskStore implements TaskStore {
                 query.setParameter("c1", expected.getIdentifierOfClassLoader());
             if (expected.hasIdentifierOfOwner())
                 query.setParameter("o1", expected.getIdentifierOfOwner());
-            if (expected.hasIdentifierOfPartition())
-                query.setParameter("p1", expected.getIdentifierOfPartition());
+            if (expected.hasClaimExpiryOrPartition())
+                query.setParameter("p1", expected.getClaimExpiryOrPartition());
             if (expected.hasMiscBinaryFlags())
                 query.setParameter("m1", expected.getMiscBinaryFlags());
             if (expected.hasName())
@@ -1325,35 +1462,6 @@ public class DatabaseTaskStore implements TaskStore {
 
     /** {@inheritDoc} */
     @Override
-    public int removePropertiesIfLessThanOrEqual(String pattern, Character escape, String comparisonValue) throws Exception {
-        StringBuilder delete = new StringBuilder(58)
-                        .append("DELETE FROM Property WHERE ID LIKE :p AND VAL<:c");
-        if (escape != null)
-            delete.append(" ESCAPE :e");
-
-        final boolean trace = TraceComponent.isAnyTracingEnabled();
-        if (trace && tc.isEntryEnabled())
-            Tr.entry(this, tc, "removePropertiesIfLessThanOrEqual", pattern, escape, comparisonValue, delete);
-
-        EntityManager em = getPersistenceServiceUnit().createEntityManager();
-        try {
-            Query query = em.createQuery(delete.toString());
-            query.setParameter("p", pattern);
-            query.setParameter("c", comparisonValue);
-            if (escape != null)
-                query.setParameter("e", escape);
-            int count = query.executeUpdate();
-
-            if (trace && tc.isEntryEnabled())
-                Tr.exit(this, tc, "removePropertiesIfLessThanOrEqual", count);
-            return count;
-        } finally {
-            em.close();
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public boolean removeProperty(String name) throws Exception {
         String update = "DELETE FROM Property WHERE ID=:i";
 
@@ -1376,25 +1484,89 @@ public class DatabaseTaskStore implements TaskStore {
     }
 
     /** {@inheritDoc} */
+    @FFDCIgnore({ LockTimeoutException.class, PersistenceException.class, PessimisticLockException.class, QueryTimeoutException.class })
     @Override
-    public boolean setPartition(long taskId, int version, long newPartitionId) throws Exception {
+    public boolean claimIfNotLocked(long taskId, int version, long claimExpiryOrPartition) throws Exception {
+        String find = "SELECT t.ID FROM Task t WHERE t.ID=:i AND t.VERSION=:v";
         String update = "UPDATE Task t SET t.PARTN=:p,t.VERSION=t.VERSION+1 WHERE t.ID=:i AND t.VERSION=:v";
 
         final boolean trace = TraceComponent.isAnyTracingEnabled();
-        if (trace && tc.isEntryEnabled())
-            Tr.entry(this, tc, "setPartition", taskId + " v" + version + " assign to " + newPartitionId, update);
+        if (trace && tc.isEntryEnabled()) {
+            StringBuilder b = new StringBuilder().append(taskId).append(" v").append(version);
+            if (claimExpiryOrPartition > 1500000000000l)
+                Utils.appendDate(b.append(" claim until "), claimExpiryOrPartition);
+            else
+                b.append(" assign to partition ").append(claimExpiryOrPartition);
+            Tr.entry(this, tc, "claimIfNotLocked", b, find, update);
+        }
+
+        // A single update statement would be preferred over find+update. However, unfortunately EclipseLink does not allow
+        // the javax.persistence.lock.timeout hint on updates, so our only option is to first run an extra query so that
+        // databases which support lock timeout (such as SQL Server) can be given the opportunity to time out immediately
+        // when the entry is already locked.
 
         EntityManager em = getPersistenceServiceUnit().createEntityManager();
         try {
-            Query query = em.createQuery(update.toString());
-            query.setParameter("p", newPartitionId);
-            query.setParameter("i", taskId);
-            query.setParameter("v", version);
-            boolean assigned = query.executeUpdate() > 0;
+            TypedQuery<Long> lockingQuery = em.createQuery(find, Long.class);
+            lockingQuery.setLockMode(LockModeType.PESSIMISTIC_WRITE);
+            lockingQuery.setHint("javax.persistence.lock.timeout", 0); // milliseconds
+
+            // Some databases don't support lock timeout. As a workaround, use a short query timeout,
+            lockingQuery.setHint("eclipselink.query.timeout.unit", "MILLISECONDS"); // Make EclipseLink follow the JPA spec
+            lockingQuery.setHint("javax.persistence.query.timeout", 3000); // 3 seconds
+
+            lockingQuery.setParameter("i", taskId);
+            lockingQuery.setParameter("v", version);
+
+            List<Long> lockedEntries = lockingQuery.getResultList();
+            if (lockedEntries.isEmpty()) {
+                if (trace && tc.isEntryEnabled())
+                    Tr.exit(this, tc, "claimIfNotLocked", "false - still owned by another member");
+                return false;
+            }
+
+            Query updateClaim = em.createQuery(update);
+            updateClaim.setParameter("p", claimExpiryOrPartition);
+            updateClaim.setParameter("i", taskId);
+            updateClaim.setParameter("v", version);
+            boolean claimed = updateClaim.executeUpdate() > 0;
 
             if (trace && tc.isEntryEnabled())
-                Tr.exit(this, tc, "setPartition", assigned);
-            return assigned;
+                Tr.exit(this, tc, "claimIfNotLocked", claimed);
+            return claimed;
+        } catch (LockTimeoutException x) {
+            if (trace && tc.isEntryEnabled())
+                Tr.exit(this, tc, "claimIfNotLocked", "false: lock timeout - still owned by another member");
+            return false;
+        } catch (QueryTimeoutException x) {
+            if (trace && tc.isEntryEnabled())
+                Tr.exit(this, tc, "claimIfNotLocked", "false: query timeout - still owned by another member");
+            return false;
+        } catch (PessimisticLockException x) {
+            if (trace && tc.isEntryEnabled())
+                Tr.exit(this, tc, "claimIfNotLocked", "false: pessimistic lock timeout - still owned by another member");
+            return false;
+        } catch (PersistenceException x) {
+            for (Throwable c = x.getCause(); c != null; c = c.getCause())
+                if (c instanceof SQLTimeoutException) {
+                    if (trace && tc.isEntryEnabled())
+                        Tr.exit(this, tc, "claimIfNotLocked", "false: SQLTimeoutException - still owned by another member");
+                    return false;
+                } else if (c instanceof SQLException) {
+                    String ss = ((SQLException) c).getSQLState();
+                    if ("XCL52".equals(ss) // Derby Network Client SQLState for query timeout
+                    ) {
+                        if (trace && tc.isEntryEnabled())
+                            Tr.exit(this, tc, "claimIfNotLocked", "false: SQLState + " + ss + " - still owned by another member");
+                        return false;
+                    }
+                }
+            FFDCFilter.processException(x, getClass().getName(), "1466", this);
+            throw x;
+        } catch (Exception x) {
+            throw x; // force FFDC to be logged
+        } catch (Error x) {
+            throw x; // force FFDC to be logged
         } finally {
             em.close();
         }
@@ -1427,38 +1599,12 @@ public class DatabaseTaskStore implements TaskStore {
 
     /** {@inheritDoc} */
     @Override
-    public boolean setPropertyIfLessThanOrEqual(String name, String value, String comparisonValue) throws Exception {
-        String update = "UPDATE Property SET VAL=:v WHERE ID=:i AND VAL<:c";
-
-        final boolean trace = TraceComponent.isAnyTracingEnabled();
-        if (trace && tc.isEntryEnabled())
-            Tr.entry(this, tc, "setPropertyIfLessThanOrEqual", name, value, comparisonValue, update);
-
-        boolean replaced;
-        EntityManager em = getPersistenceServiceUnit().createEntityManager();
-        try {
-            Query query = em.createQuery(update);
-            query.setParameter("v", value);
-            query.setParameter("i", name);
-            query.setParameter("c", comparisonValue);
-            replaced = query.executeUpdate() > 0;
-        } finally {
-            em.close();
-        }
-
-        if (trace && tc.isEntryEnabled())
-            Tr.exit(this, tc, "setPropertyIfLessThanOrEqual", replaced);
-        return replaced;
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public int transfer(Long maxTaskId, long oldPartitionId, long newPartitionId) throws Exception {
-        StringBuilder update = new StringBuilder(69)
-                        .append("UPDATE Task SET PARTN=:p2 WHERE ");
+        StringBuilder update = new StringBuilder(101)
+                        .append("UPDATE Task t SET t.PARTN=:p2,t.VERSION=t.VERSION+1 WHERE ");
         if (maxTaskId != null && maxTaskId != Long.MAX_VALUE)
-            update.append("ID<=:i AND ");
-        update.append("PARTN=:p1 AND STATES<").append(TaskState.ENDED.bit);
+            update.append("t.ID<=:i AND ");
+        update.append("t.PARTN=:p1 AND t.STATES<").append(TaskState.ENDED.bit);
 
         final boolean trace = TraceComponent.isAnyTracingEnabled();
         if (trace && tc.isEntryEnabled())
@@ -1476,6 +1622,31 @@ public class DatabaseTaskStore implements TaskStore {
             if (trace && tc.isEntryEnabled())
                 Tr.exit(this, tc, "transfer", count);
             return count;
+        } finally {
+            em.close();
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean updatePollInfo(long partitionId, long newExpiry) throws Exception {
+        String update = "UPDATE Partition p SET p.EXPIRY=:e,p.STATES=:s WHERE p.ID=:i";
+
+        final boolean trace = TraceComponent.isAnyTracingEnabled();
+        if (trace && tc.isEntryEnabled())
+            Tr.entry(this, tc, "updatePollInfo", partitionId, newExpiry, update);
+
+        EntityManager em = getPersistenceServiceUnit().createEntityManager();
+        try {
+            Query query = em.createQuery(update);
+            query.setParameter("i", partitionId);
+            query.setParameter("e", newExpiry);
+            query.setParameter("s", System.currentTimeMillis()); // last-updated timestamp
+            int count = query.executeUpdate();
+
+            if (trace && tc.isEntryEnabled())
+                Tr.exit(this, tc, "updatePollInfo", count);
+            return count > 0;
         } finally {
             em.close();
         }

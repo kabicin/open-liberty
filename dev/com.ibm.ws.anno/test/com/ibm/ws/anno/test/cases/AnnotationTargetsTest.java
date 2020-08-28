@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012 IBM Corporation and others.
+ * Copyright (c) 2012, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,6 +10,7 @@
  *******************************************************************************/
 package com.ibm.ws.anno.test.cases;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import javax.annotation.Resource;
@@ -21,7 +22,7 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 
 import com.ibm.ws.anno.classsource.internal.ClassSourceImpl_Factory;
-import com.ibm.ws.anno.service.internal.AnnotationServiceImpl_Service;
+import com.ibm.ws.anno.targets.internal.AnnotationTargetsImpl_Factory;
 import com.ibm.ws.anno.targets.internal.AnnotationTargetsImpl_Targets;
 import com.ibm.ws.anno.test.data.BClass;
 import com.ibm.ws.anno.test.data.CIntf;
@@ -30,6 +31,7 @@ import com.ibm.ws.anno.test.data.DerivedNoInherit;
 import com.ibm.ws.anno.test.data.sub.BaseNoInheritAnno;
 import com.ibm.ws.anno.test.data.sub.InheritAnno;
 import com.ibm.ws.anno.test.data.sub.SubBase;
+import com.ibm.ws.anno.util.internal.UtilImpl_Factory;
 import com.ibm.wsspi.anno.classsource.ClassSource_Aggregate;
 import com.ibm.wsspi.anno.classsource.ClassSource_Aggregate.ScanPolicy;
 import com.ibm.wsspi.anno.classsource.ClassSource_Exception;
@@ -52,20 +54,20 @@ public class AnnotationTargetsTest {
 
     @BeforeClass
     public static void setup() throws ClassSource_Exception, AnnotationTargets_Exception {
-        AnnotationServiceImpl_Service annoService = new AnnotationServiceImpl_Service();
 
-        ClassSourceImpl_Factory factory = annoService.getClassSourceFactory();
+        UtilImpl_Factory utilFactory = new UtilImpl_Factory();
+        ClassSourceImpl_Factory factory = new ClassSourceImpl_Factory(utilFactory);
 
         ClassSource_Aggregate classSource = factory.createAggregateClassSource("AnnoInfoTest");
 
-        String testClassesDir = System.getProperty("test.classesDir", "bin_test");
+        String testClassesDir = System.getProperty("test.classesDir", "bin");
         factory.addDirectoryClassSource(classSource, testClassesDir, testClassesDir, ScanPolicy.SEED);
 
         //ClassSource test = factory.createDirectoryClassSource(classSource, "test", "test2");
 
         //ClassSource test = factory.createContainerClassSource(classSource, "testSource", null);
 
-        AnnotationTargets_Factory annoFactory = annoService.getAnnotationTargetsFactory();
+        AnnotationTargets_Factory annoFactory = new AnnotationTargetsImpl_Factory(utilFactory, factory);
         targets = (AnnotationTargetsImpl_Targets) annoFactory.createTargets();
         targets.scan(classSource, true);
     }
@@ -79,15 +81,23 @@ public class AnnotationTargetsTest {
         String bClassName = getClassName(BClass.class);
         String annoName = Resource.class.getName();
 
-        Set<String> classes = targets.getClassesWithMethodAnnotation(annoName);
+        Set<String> classes = filter( targets.getClassesWithMethodAnnotation(annoName) );
         Assert.assertEquals(1, classes.size());
         Assert.assertTrue(toString(classes), classes.contains(bClassName));
     }
 
-    /**
-     * @param classes
-     * @return
-     */
+    private static final String ANNO_PREFIX = "com.ibm.ws.anno.";
+
+    private Set<String> filter(Set<String> classNames) {
+        Set<String> filteredClassNames = new HashSet<String>(classNames.size());
+        for ( String className : classNames ) {
+            if ( className.startsWith(ANNO_PREFIX) ) {
+                filteredClassNames.add(className);
+            }
+        }
+        return filteredClassNames;
+    }
+
     private String toString(Set<String> classes) {
         StringBuilder sb = new StringBuilder();
         sb.append('[');
@@ -126,11 +136,11 @@ public class AnnotationTargetsTest {
         String testAnno = Test.class.getName();
         String resourceAnno = Resource.class.getName();
 
-        Set<String> classes = targets.getClassesWithMethodAnnotation(testAnno);
+        Set<String> classes = filter( targets.getClassesWithMethodAnnotation(testAnno) );
         Assert.assertEquals(toString(classes), 31, classes.size());
         Assert.assertTrue(classes.contains(subClassName));
 
-        classes = targets.getClassesWithMethodAnnotation(resourceAnno);
+        classes = filter( targets.getClassesWithMethodAnnotation(resourceAnno) );
         Assert.assertEquals(1, classes.size());
         Assert.assertTrue(classes.contains(bClassName));
     }
@@ -141,7 +151,7 @@ public class AnnotationTargetsTest {
 
         String idAnno = Id.class.getName();
 
-        Set<String> classes = targets.getClassesWithFieldAnnotation(idAnno);
+        Set<String> classes = filter( targets.getClassesWithFieldAnnotation(idAnno) );
         Assert.assertEquals(1, classes.size());
         Assert.assertTrue(toString(classes), classes.contains(subClassName));
     }
@@ -150,7 +160,7 @@ public class AnnotationTargetsTest {
     public void testNoInheritAnnos() {
         String derivedNoInherit = getClassName(DerivedNoInherit.class);
         String resourceAnno = Resource.class.getName();
-        Set<String> classes = targets.getAllInheritedAnnotatedClasses(resourceAnno);
+        Set<String> classes = filter( targets.getAllInheritedAnnotatedClasses(resourceAnno) );
         Assert.assertEquals(toString(classes), 3, classes.size());
         Assert.assertTrue(toString(classes), classes.contains(derivedNoInherit));
     }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2018 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -89,6 +89,9 @@ import com.ibm.websphere.simplicity.config.ServerConfigurationFactory;
 import com.ibm.websphere.simplicity.log.Log;
 import com.ibm.websphere.soe_reporting.SOEHttpPostUtil;
 import com.ibm.ws.fat.util.ACEScanner;
+import com.ibm.ws.fat.util.jmx.JmxException;
+import com.ibm.ws.fat.util.jmx.JmxServiceUrlFactory;
+import com.ibm.ws.fat.util.jmx.mbeans.ApplicationMBean;
 import com.ibm.ws.logging.utils.FileLogHolder;
 
 import componenttest.common.apiservices.Bootstrap;
@@ -250,6 +253,8 @@ public class LibertyServer implements LogMonitorClient {
 
     protected int osgiConsolePort = 5678; // The port number of the OSGi Console
 
+    protected static final String OSGI_DIR_NAME = "org.eclipse.osgi";
+
     // Use port 0 if the property can't be found, these should be picked up from a properties file
     // if not then the test may create a liberty server and get the ports from a bootstrap port.
     // If neither way obtains a port then port 0 will be used which will cause the tests to fail in
@@ -290,6 +295,8 @@ public class LibertyServer implements LogMonitorClient {
 
     private boolean needsPostTestRecover = true;
 
+    private boolean logOnUpdate = true;
+
     protected boolean debuggingAllowed = true;
 
     /**
@@ -312,6 +319,14 @@ public class LibertyServer implements LogMonitorClient {
      */
     public void setDebuggingAllowed(boolean debuggingAllowed) {
         this.debuggingAllowed = debuggingAllowed;
+    }
+
+    public boolean isLogOnUpdate() {
+        return logOnUpdate;
+    }
+
+    public void setLogOnUpdate(boolean logOnUpdate) {
+        this.logOnUpdate = logOnUpdate;
     }
 
     /**
@@ -1050,6 +1065,7 @@ public class LibertyServer implements LogMonitorClient {
 
     public enum IncludeArg {
         MINIFY, ALL, USR, RUNNABLE, MINIFYRUNNABLE;
+
         public String getIncludeString() {
             if (this.equals(MINIFYRUNNABLE)) {
                 return "--include=" + "minify,runnable";
@@ -1376,11 +1392,11 @@ public class LibertyServer implements LogMonitorClient {
                     // extraordinarily small.
                     Log.warning(c, "The process that runs the server script did not return. The server may or may not have actually started.");
 
-                    //Call resetStarted() to try to determine whether the server is actually running or not.
+                    // Call resetStarted() to try to determine whether the server is actually running or not.
                     int rc = resetStarted();
                     if (rc == 0) {
                         // The server is running, so proceed as if nothing went wrong.
-                        return new ProgramOutput(cmd, rc, "No output buffer available", "No error buffer available");
+                        output = new ProgramOutput(cmd, rc, "No output buffer available", "No error buffer available");
                     } else {
                         Log.info(c, method, "The server does not appear to be running. (rc=" + rc + "). Retrying server start now");
                         // If at first you don't succeed...
@@ -2416,7 +2432,7 @@ public class LibertyServer implements LogMonitorClient {
                 clearMessageCounters();
             }
 
-            if (GLOBAL_JAVA2SECURITY || GLOBAL_DEBUG_JAVA2SECURITY) {
+            if (isJava2SecurityEnabled()) {
                 try {
                     new ACEScanner(this).run();
                 } catch (Throwable t) {
@@ -2515,7 +2531,20 @@ public class LibertyServer implements LogMonitorClient {
                 // When things go wrong with j2sec, a LOT of things tend to go wrong, so just leave a pointer
                 // to the nicely formatted ACE report instead of putting every single issue in the exception msg
                 sb.append("\n <br>");
-                sb.append("Java 2 security issues were found in logs.  See autoFVT/ACE-report-*.log for details.");
+                sb.append("Java 2 security issues were found in logs");
+                boolean showJ2secErrors = true;
+                // If an ACE-report will be generated....
+                if (isJava2SecurityEnabled()) {
+                    sb.append("  See autoFVT/ACE-report-*.log for details.");
+                    if (j2secIssues.size() > 25)
+                        showJ2secErrors = false;
+                }
+                if (showJ2secErrors) {
+                    for (String j2secIssue : j2secIssues) {
+                        sb.append("\n <br>");
+                        sb.append(j2secIssue);
+                    }
+                }
                 errorsInLogs.removeAll(j2secIssues);
             }
             for (String errorInLog : errorsInLogs) {
@@ -2665,7 +2694,7 @@ public class LibertyServer implements LogMonitorClient {
         logs = listDirectoryContents(remoteDirectory);
         for (String l : logs) {
             if (remoteDirectory.getName().equals("workarea")) {
-                if (l.equals("org.eclipse.osgi") || l.startsWith(".s")) {
+                if (l.equals(OSGI_DIR_NAME) || l.startsWith(".s")) {
                     // skip the osgi framework cache, and runtime artifacts: too big / too racy
                     Log.finest(c, "recursivelyCopyDirectory", "Skipping workarea element " + l);
                     continue;
@@ -2791,6 +2820,10 @@ public class LibertyServer implements LogMonitorClient {
 
     public String getServerRoot() {
         return serverRoot;
+    }
+
+    public String getOsgiWorkAreaRoot() {
+        return serverRoot + "/workarea" + "/" + OSGI_DIR_NAME;
     }
 
     public String getServerSharedPath() {
@@ -4166,7 +4199,7 @@ public class LibertyServer implements LogMonitorClient {
         // above. Even if the timestamp would not be changed, the size out be.
         LibertyFileManager.moveLibertyFile(newServerFile, file);
 
-        if (LOG.isLoggable(Level.INFO)) {
+        if (LOG.isLoggable(Level.INFO) && logOnUpdate) {
             LOG.info("Server configuration updated:");
             logServerConfiguration(Level.INFO, false);
         }
@@ -4500,6 +4533,28 @@ public class LibertyServer implements LogMonitorClient {
         }
 
         return matches;
+    }
+
+    /**
+     * This method will search for the provided expression in the log file
+     * on an incremental basis. It starts with reading the file at the offset where
+     * the last mark was set (or the beginning of the file if no mark has been set)
+     * and reads until the end of the file.
+     *
+     * @param  regexp    pattern to search for
+     * @return           A list of the lines in the log file which contain the matching
+     *                   pattern. No matches result in an empty list.
+     * @throws Exception
+     */
+    public List<String> findStringsInLogsUsingMark(String regexp, String filePath) throws Exception {
+        final RemoteFile remoteFile;
+        String absolutePath = serverRoot + "/" + filePath;
+        if (machineOS == OperatingSystem.ZOS && absolutePath.equalsIgnoreCase(consoleAbsPath)) {
+            remoteFile = new RemoteFile(machine, absolutePath, Charset.forName(EBCDIC_CHARSET_NAME));
+        } else {
+            remoteFile = LibertyFileManager.getLibertyFile(machine, absolutePath);
+        }
+        return findStringsInLogsUsingMark(regexp, remoteFile);
     }
 
     /**
@@ -5466,6 +5521,11 @@ public class LibertyServer implements LogMonitorClient {
         startServerAndValidate(true, cleanStart, validateApps);
     }
 
+    public void deleteAllDropinApplications() throws Exception {
+        LibertyFileManager.deleteLibertyDirectoryAndContents(machine, getServerRoot() + "/dropins");
+        LibertyFileManager.createRemoteFile(machine, getServerRoot() + "/dropins");
+    }
+
     /**
      * Restart a drop-ins application.
      *
@@ -5891,6 +5951,40 @@ public class LibertyServer implements LogMonitorClient {
     }
 
     /**
+     * Retrieves an {@link ApplicationMBean} for a particular application on this server
+     *
+     * @param  applicationName the name of the application to operate on
+     * @return                 an {@link ApplicationMBean}
+     * @throws JmxException    if the object name for the input application cannot be constructed
+     */
+    public ApplicationMBean getApplicationMBean(String applicationName) throws JmxException {
+        return new ApplicationMBean(getJmxServiceUrl(), applicationName);
+    }
+
+    /**
+     * Get the JMX connection URL of this server
+     *
+     * @return              a {@link JMXServiceURL} that allows you to invoke MBeans on the server
+     * @throws JmxException
+     *                          if the server can't be found,
+     *                          the localConnector-1.0 feature is not enabled,
+     *                          or the address file is not valid
+     */
+    public JMXServiceURL getJmxServiceUrl() throws JmxException {
+        return JmxServiceUrlFactory.getInstance().getUrl(this);
+    }
+
+    /**
+     * Restarts an application via its MBean
+     *
+     * @param  applicationName the application to be restarted
+     * @throws JmxException
+     */
+    public void restartApplication(String applicationName) throws JmxException {
+        getApplicationMBean(applicationName).restart();
+    }
+
+    /**
      * Wait for the specified regex in the default logs from the last offset.
      * The offset is incremented every time this method is called.
      * <p>
@@ -6024,9 +6118,6 @@ public class LibertyServer implements LogMonitorClient {
         fixedIgnoreErrorsList.add("CWWKF0017E.*cik.ext.product1.properties");
         // Added due to build break defect 221453.
         fixedIgnoreErrorsList.add("CWWKG0011W");
-        if (isJavaVersion6()) {
-            fixedIgnoreErrorsList.add("CWWKE0109W");
-        }
     }
 
     public boolean isJava2SecurityEnabled() {
@@ -6040,18 +6131,15 @@ public class LibertyServer implements LogMonitorClient {
         return !isJava2SecExempt;
     }
 
+    /**
+     * No longer using bootstrap properties to update server config for database rotation.
+     * Instead look at using the fattest.databases module
+     */
+    @Deprecated
     public void configureForAnyDatabase() throws Exception {
         ServerConfiguration config = this.getServerConfiguration();
         config.updateDatabaseArtifacts();
         this.updateServerConfiguration(config);
-    }
-
-    public boolean isJavaVersion6() {
-        return javaInfo.majorVersion() == 6;
-    }
-
-    public boolean isJavaVersion8() {
-        return javaInfo.majorVersion() == 8;
     }
 
     public boolean isIBMJVM() {
@@ -6180,5 +6268,4 @@ public class LibertyServer implements LogMonitorClient {
     public String toString() {
         return serverToUse + " : " + super.toString();
     }
-
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011 IBM Corporation and others.
+ * Copyright (c) 2011,2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -13,6 +13,8 @@ package com.ibm.ws.artifact.file.internal;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,8 +52,8 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
      * Used to build a FileContainer for a File, not present within an enclosing container.
      *
      * @param cacheDir location to host this containers cached data.
-     * @param f the File to use.
-     * @param c somewhere to obtain the current container factory from.
+     * @param f        the File to use.
+     * @param c        somewhere to obtain the current container factory from.
      */
     FileContainer(File cacheDir, File f, ContainerFactoryHolder c) {
         this.cacheDir = cacheDir;
@@ -68,9 +70,9 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
      * Builds a FileContainer that is enclosed by another Container instance.
      *
      * @param cacheDir location for this container to use for cache data.
-     * @param parent the enclosing ArtifactContainer.
-     * @param e the ArtifactEntry in the enclosing ArtifactContainer representing this ArtifactContainer.
-     * @param f the File object on disk representing this ArtifactContainer.
+     * @param parent   the enclosing ArtifactContainer.
+     * @param e        the ArtifactEntry in the enclosing ArtifactContainer representing this ArtifactContainer.
+     * @param f        the File object on disk representing this ArtifactContainer.
      */
     FileContainer(File cacheDir, ArtifactContainer parent, ArtifactEntry e, File f, ContainerFactoryHolder c) {
         this.cacheDir = cacheDir;
@@ -88,10 +90,10 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
      * may be a non-root Container.
      *
      * @param parent the enclosing Container.
-     * @param e the entry in the enclosing Container representing this Container.
-     * @param f the File object on disk representing this Container.
+     * @param e      the entry in the enclosing Container representing this Container.
+     * @param f      the File object on disk representing this Container.
      * @param isRoot true if this Container should be treated as a root Container, false otherwise.
-     * @param root the Container representing root for this container hierarchy.
+     * @param root   the Container representing root for this container hierarchy.
      */
     FileContainer(File cacheDir, ArtifactContainer parent, ArtifactEntry e, File f, ContainerFactoryHolder c, boolean isRoot, FileContainer root) {
         this.cacheDir = cacheDir;
@@ -192,10 +194,12 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
     }
 
     @Override
-    public void stopUsingFastMode() {}
+    public void stopUsingFastMode() {
+    }
 
     @Override
-    public void useFastMode() {}
+    public void useFastMode() {
+    }
 
     @Override
     public ArtifactEntry getEntry(String pathAndName) {
@@ -230,10 +234,13 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
 
         //quick test..
         File target = new File(dir, pathAndName);
+        Boolean fileExists = null;
         if ((!isRoot && !pathAndName.startsWith("/")) || isRoot) {
             //if path is relative, and we're not root, then validate path
             //or if we are root, just validate it anyways.
-            if (!FileUtils.fileExists(target) || !PathUtils.checkCase(target, pathAndName)) {
+            boolean exists = FileUtils.fileExists(target);
+            fileExists = exists ? Boolean.TRUE : Boolean.FALSE;
+            if (!exists || !PathUtils.checkCase(target, pathAndName)) {
                 //no file/dir ? bug out early.
                 return null;
             }
@@ -241,7 +248,8 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
 
         //if there's no / in the name.. it's immediately relative to here.. build & return it.
         if (pathAndName.indexOf("/") == -1) {
-            if (FileUtils.fileExists(target) && PathUtils.checkCase(target, pathAndName))
+            boolean exists = fileExists != null ? fileExists.booleanValue() : FileUtils.fileExists(target);
+            if (exists && PathUtils.checkCase(target, pathAndName))
                 return new FileEntry(this, target, root, containerFactoryHolder);
             else
                 return null;
@@ -318,7 +326,20 @@ public class FileContainer implements com.ibm.wsspi.artifact.ArtifactContainer {
     public Collection<URL> getURLs() {
         // There is only ever a single URI for the directory so return this
         try {
-            return Collections.singleton(dir.toURI().toURL());
+            if (System.getSecurityManager() == null) {
+                return Collections.singleton(dir.toURI().toURL());
+            } else {
+                return AccessController.doPrivileged(new PrivilegedAction<Collection<URL>>() {
+                    @Override
+                    public Collection<URL> run() {
+                        try {
+                            return Collections.singleton(dir.toURI().toURL());
+                        } catch (MalformedURLException e) {
+                            return Collections.emptySet();
+                        }
+                    }
+                });
+            }
         } catch (MalformedURLException e) {
             return Collections.emptySet();
         }

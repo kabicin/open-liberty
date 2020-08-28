@@ -17,9 +17,15 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
+import org.junit.rules.TestWatcher;
+import org.junit.runner.Description;
 import org.junit.runner.RunWith;
 
+import com.ibm.ejb2x.defbnd.web.EJB2XDefBndTestServlet;
 import com.ibm.websphere.simplicity.ShrinkHelper;
+import com.ibm.ws.ejbcontainer.bindings.defbnd.web.DefaultBindingsServlet;
+import com.ibm.ws.ejbcontainer.bindings.defbnd.web.DefaultComponentBindingsServlet;
 import com.ibm.ws.ejbcontainer.bindings.defbnd.web.DefaultJavaColonBindingsServlet;
 
 import componenttest.annotation.Server;
@@ -34,15 +40,25 @@ import componenttest.topology.utils.FATServletClient;
 @RunWith(FATRunner.class)
 public class DefaultBindingsTest extends FATServletClient {
 
-    @Server("com.ibm.ws.ejbcontainer.bindings.fat.server")
-    @TestServlets({ @TestServlet(servlet = DefaultJavaColonBindingsServlet.class, contextRoot = "EJB3DefBndWeb") })
-    public static LibertyServer server;
+    @Rule
+    public TestWatcher watchman = new TestWatcher() {
+        @Override
+        protected void failed(Throwable e, Description description) {
+            try {
+                server.dumpServer("serverDump");
+            } catch (Exception e1) {
+                System.out.println("Failed to dump server");
+                e1.printStackTrace();
+            }
+        }
+    };
 
-//    @Server("com.ibm.ws.ejbcontainer.bindings.fat.server")
-//    @TestServlets({ @TestServlet(servlet = DefaultJavaColonBindingsServlet.class, contextRoot = "EJB3DefBndWeb"),
-//                    @TestServlet(servlet = DefaultBindingsServlet.class, contextRoot = "EJB3DefBndWeb"),
-//                    @TestServlet(servlet = DefaultComponentBindingsServlet.class, contextRoot = "EJB3DefBndWeb") })
-//    public static LibertyServer server;
+    @Server("com.ibm.ws.ejbcontainer.bindings.fat.server")
+    @TestServlets({ @TestServlet(servlet = DefaultJavaColonBindingsServlet.class, contextRoot = "EJB3DefBndWeb"),
+                    @TestServlet(servlet = DefaultBindingsServlet.class, contextRoot = "EJB3DefBndWeb"),
+                    @TestServlet(servlet = DefaultComponentBindingsServlet.class, contextRoot = "EJB3DefBndWeb"),
+                    @TestServlet(servlet = EJB2XDefBndTestServlet.class, contextRoot = "EJB2XDefBndWeb") })
+    public static LibertyServer server;
 
     @ClassRule
     public static RepeatTests r = RepeatTests.with(FeatureReplacementAction.EE7_FEATURES().forServers("com.ibm.ws.ejbcontainer.bindings.fat.server")).andWith(FeatureReplacementAction.EE8_FEATURES().forServers("com.ibm.ws.ejbcontainer.bindings.fat.server"));
@@ -58,6 +74,16 @@ public class DefaultBindingsTest extends FATServletClient {
         ShrinkHelper.addDirectory(EJB3DefBndTestApp, "test-applications/EJB3DefBndTestApp.ear/resources");
 
         ShrinkHelper.exportDropinAppToServer(server, EJB3DefBndTestApp);
+
+        //EJB2X
+        JavaArchive EJB2XDefBndEJB = ShrinkHelper.buildJavaArchive("EJB2XDefBndEJB.jar", "com.ibm.ejb2x.defbnd.ejb.");
+        ShrinkHelper.addDirectory(EJB2XDefBndEJB, "test-applications/EJB2XDefBndEJB.jar/resources");
+        WebArchive EJB2XDefBndWeb = ShrinkHelper.buildDefaultApp("EJB2XDefBndWeb.war", "com.ibm.ejb2x.defbnd.web.");
+        EnterpriseArchive EJB2XDefBndTestApp = ShrinkWrap.create(EnterpriseArchive.class, "EJB2XDefBndTestApp.ear");
+        EJB2XDefBndTestApp.addAsModules(EJB2XDefBndEJB, EJB2XDefBndWeb);
+        ShrinkHelper.addDirectory(EJB2XDefBndTestApp, "test-applications/EJB2XDefBndTestApp.ear/resources");
+
+        ShrinkHelper.exportDropinAppToServer(server, EJB2XDefBndTestApp);
 
         server.startServer();
     }

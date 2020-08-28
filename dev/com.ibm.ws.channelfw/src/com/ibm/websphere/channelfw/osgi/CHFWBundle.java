@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009 IBM Corporation and others.
+ * Copyright (c) 2009, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -13,9 +13,12 @@ package com.ibm.websphere.channelfw.osgi;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.osgi.framework.ServiceReference;
@@ -45,7 +48,6 @@ import com.ibm.ws.channelfw.internal.ChannelFrameworkImpl;
 import com.ibm.ws.channelfw.internal.chains.EndPointMgrImpl;
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
 import com.ibm.ws.kernel.feature.ServerStarted;
-import com.ibm.ws.staticvalue.StaticValue;
 import com.ibm.ws.tcpchannel.internal.TCPChannelFactory;
 import com.ibm.ws.udpchannel.internal.UDPChannelFactory;
 import com.ibm.wsspi.bytebuffer.WsByteBufferPoolManager;
@@ -78,12 +80,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * Active HttpDispatcher instance. May be null between deactivate and activate
      * calls.
      */
-    private static final StaticValue<AtomicReference<CHFWBundle>> instance = StaticValue.createStaticValue(new Callable<AtomicReference<CHFWBundle>>() {
-        @Override
-        public AtomicReference<CHFWBundle> call() {
-            return new AtomicReference<CHFWBundle>();
-        }
-    });;
+    private static final AtomicReference<CHFWBundle> instance = new AtomicReference<CHFWBundle>();
 
     /** Reference to the channel framework */
     private ChannelFrameworkImpl chfw = null;
@@ -98,11 +95,21 @@ public class CHFWBundle implements ServerQuiesceListener {
     /** Reference to the executor service -- required */
     private ExecutorService executorService = null;
 
-    private static boolean serverCompletelyStarted = false;
-    private static Object syncStarted = new Object() {}; // use brackets/inner class to make lock appear in dumps using class name
+    private static AtomicBoolean serverCompletelyStarted = new AtomicBoolean(false);
+    private static Queue<Callable<?>> serverStartedTasks = new LinkedBlockingQueue<>();
+    private static Object syncStarted = new Object() {
+    }; // use brackets/inner class to make lock appear in dumps using class name
 
     private volatile ServiceReference<HttpProtocolBehavior> protocolBehaviorRef;
     private static volatile String httpVersionSetting = null;
+    private static volatile boolean versionSet = false;
+    private static volatile boolean default20Off = false;
+    private static volatile boolean default20On = false;
+
+    /** The channel will disable HTTP/2.0 by default. */
+    private static final String OPTIONAL_DEFAULT_OFF_20 = "2.0_Optional_Off";
+    /** The channel will be enabled for HTTP/2.0 by default". */
+    private static final String OPTIONAL_DEFAULT_ON_20 = "2.0_Optional_On";
 
     /**
      * Constructor.
@@ -130,7 +137,7 @@ public class CHFWBundle implements ServerQuiesceListener {
         this.chfw.registerFactory("TCPChannel", TCPChannelFactory.class);
         this.chfw.registerFactory("UDPChannel", UDPChannelFactory.class);
 
-        instance.get().set(this); // required components have been activated
+        instance.set(this); // required components have been activated
     }
 
     /**
@@ -143,7 +150,7 @@ public class CHFWBundle implements ServerQuiesceListener {
         if (TraceComponent.isAnyTracingEnabled() && tc.isEventEnabled()) {
             Tr.event(this, tc, "Deactivating");
         }
-        instance.get().compareAndSet(this, null);
+        instance.compareAndSet(this, null);
 
         if (TraceComponent.isAnyTracingEnabled() && tc.isEventEnabled()) {
             Tr.event(this, tc, "Destroying all endpoints");
@@ -168,7 +175,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * configuration change.
      *
      * @param cfwConfiguration
-     *            the configuration data
+     *                             the configuration data
      */
     @Modified
     protected synchronized void modified(Map<String, Object> cfwConfiguration) {
@@ -232,33 +239,56 @@ public class CHFWBundle implements ServerQuiesceListener {
                cardinality = ReferenceCardinality.OPTIONAL,
                policyOption = ReferencePolicyOption.GREEDY)
     protected void setServerStarted(ServiceReference<ServerStarted> ref) {
-        // set will be called when the ServerStarted service has been registered (by the FeatureManager as of 9/2015).  This is a signal that that
-        // the server is fully started.  Therefore we can signal such things as the TCP Channel Accept logic to start accepting connections, if the
-        // channel has been configured to do that.
+        // set will be called when the ServerStarted service has been registered (by the FeatureManager as of 9/2015).  This is a signal that
+        // the server is fully started, but before the "smarter planet" message has been output. Use this signal to run tasks, mostly likely tasks that will
+        // finish the port listening logic, that need to run at the end of server startup
 
+        Callable<?> task;
         if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-            Tr.debug(this, tc, "Server Completely Started signal received");
+            Tr.debug(this, tc, "CHFW signaled- Server Completely Started signal received");
+        }
+        while ((task = serverStartedTasks.poll()) != null) {
+            try {
+                task.call();
+            } catch (Exception e) {
+                if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
+                    Tr.debug(tc, "caught exception performing late cycle server startup task: " + e);
+                }
+            }
         }
 
         synchronized (syncStarted) {
-            serverCompletelyStarted = true;
+            serverCompletelyStarted.set(true);
             syncStarted.notifyAll();
         }
     }
 
     /**
-     * Declarative Services method for unsetting the ServerStarted service
+     * Method is called to run a task if the server has already started, if the server has not started that task is queue to be run when the server start signal
+     * has been received.
      *
-     * @param ref reference to the service
+     * @param callable - task to run
+     * @return Callable return null if the task was not ran, but queued, else return the task to denote it has ran.
+     * @throws Exception
      */
-    protected synchronized void unsetServerStarted(ServiceReference<ServerStarted> ref) {
-        // server is shutting down
+    public static <T> T runWhenServerStarted(Callable<T> callable) throws Exception {
+        synchronized (syncStarted) {
+            if (!serverCompletelyStarted.get()) {
+                serverStartedTasks.add(callable);
+                return null;
+            }
+        }
+        return callable.call();
     }
 
+    /*
+     * If the server has not completely started, then wait until it has been.
+     * The server will be "completely" stated when the server start signal has been received and any task waiting on that signal before running have now been run.
+     */
     @FFDCIgnore({ InterruptedException.class })
     public static void waitServerCompletelyStarted() {
         synchronized (syncStarted) {
-            if (!serverCompletelyStarted) {
+            if (serverCompletelyStarted.get() == false) {
                 try {
                     syncStarted.wait();
                 } catch (InterruptedException x) {
@@ -269,15 +299,24 @@ public class CHFWBundle implements ServerQuiesceListener {
         return;
     }
 
+    /**
+     * non-blocking method to return the state of server startup with respect to the server being completely started.
+     * The server will be "completely" stated when the server start signal has been received and any task waiting on that signal before running have now been run.
+     *
+     * @return
+     */
     @FFDCIgnore({ InterruptedException.class })
     public static boolean isServerCompletelyStarted() {
-        synchronized (syncStarted) {
-            if (serverCompletelyStarted) {
-                return true;
-            } else {
-                return false;
-            }
-        }
+        return serverCompletelyStarted.get();
+    }
+
+    /**
+     * Declarative Services method for unsetting the ServerStarted service
+     *
+     * @param ref reference to the service
+     */
+    protected synchronized void unsetServerStarted(ServiceReference<ServerStarted> ref) {
+        // server is shutting down
     }
 
     /**
@@ -295,7 +334,8 @@ public class CHFWBundle implements ServerQuiesceListener {
      *
      * @param service
      */
-    protected void unsetByteBufferConfig(ByteBufferConfiguration bbConfig) {}
+    protected void unsetByteBufferConfig(ByteBufferConfiguration bbConfig) {
+    }
 
     /**
      * Access the event service.
@@ -303,7 +343,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * @return EventEngine - null if not found
      */
     public static EventEngine getEventService() {
-        CHFWBundle c = instance.get().get();
+        CHFWBundle c = instance.get();
         if (null != c) {
             return c.eventService;
         }
@@ -327,7 +367,8 @@ public class CHFWBundle implements ServerQuiesceListener {
      *
      * @param service
      */
-    protected void unsetEventService(EventEngine service) {}
+    protected void unsetEventService(EventEngine service) {
+    }
 
     /**
      * Access the channel framework's {@link java.util.concurrent.ExecutorService} to
@@ -336,7 +377,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * @return the executor service instance to use within the channel framework
      */
     public static ExecutorService getExecutorService() {
-        CHFWBundle c = instance.get().get();
+        CHFWBundle c = instance.get();
         if (null != c) {
             return c.executorService;
         }
@@ -347,7 +388,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * DS method for setting the executor service reference.
      *
      * @param executorService the {@link java.util.concurrent.ExecutorService} to
-     *            queue work to.
+     *                            queue work to.
      */
     @Reference(service = ExecutorService.class,
                cardinality = ReferenceCardinality.MANDATORY)
@@ -361,7 +402,8 @@ public class CHFWBundle implements ServerQuiesceListener {
      *
      * @param executorService the service instance to clear
      */
-    protected void unsetExecutorService(ExecutorService executorService) {}
+    protected void unsetExecutorService(ExecutorService executorService) {
+    }
 
     /**
      * Access the scheduled event service.
@@ -369,7 +411,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * @return ScheduledEventService - null if not found
      */
     public static ScheduledEventService getScheduleService() {
-        CHFWBundle c = instance.get().get();
+        CHFWBundle c = instance.get();
         if (null != c) {
             return c.scheduler;
         }
@@ -393,7 +435,8 @@ public class CHFWBundle implements ServerQuiesceListener {
      *
      * @param ref
      */
-    protected void unsetScheduledExecutorService(ScheduledExecutorService ref) {}
+    protected void unsetScheduledExecutorService(ScheduledExecutorService ref) {
+    }
 
     /**
      * Access the scheduled executor service.
@@ -401,7 +444,7 @@ public class CHFWBundle implements ServerQuiesceListener {
      * @return ScheduledEventService - null if not found
      */
     public static ScheduledExecutorService getScheduledExecutorService() {
-        CHFWBundle c = instance.get().get();
+        CHFWBundle c = instance.get();
         if (null != c) {
             return c.scheduledExecutor;
         }
@@ -425,7 +468,8 @@ public class CHFWBundle implements ServerQuiesceListener {
      *
      * @param ref
      */
-    protected void unsetScheduledEventService(ScheduledEventService ref) {}
+    protected void unsetScheduledEventService(ScheduledEventService ref) {
+    }
 
     /**
      * DS method to set a factory provider.
@@ -484,17 +528,35 @@ public class CHFWBundle implements ServerQuiesceListener {
 
         protocolBehaviorRef = reference;
         httpVersionSetting = (String) reference.getProperty(HttpProtocolBehavior.HTTP_VERSION_SETTING);
+        if (OPTIONAL_DEFAULT_OFF_20.equalsIgnoreCase(httpVersionSetting)) {
+            default20Off = true;
+            versionSet = true;
+        } else if (OPTIONAL_DEFAULT_ON_20.equalsIgnoreCase(httpVersionSetting)) {
+            default20On = true;
+            versionSet = true;
+        }
     }
 
     protected synchronized void unsetBehavior(ServiceReference<HttpProtocolBehavior> reference) {
         if (reference == this.protocolBehaviorRef) {
             protocolBehaviorRef = null;
             httpVersionSetting = null;
+            versionSet = false;
+            default20Off = false;
+            default20On = false;
         }
     }
 
     public static String getServletConfiguredHttpVersionSetting() {
         return httpVersionSetting;
+    }
+
+    public static boolean isHttp2DisabledByDefault() {
+        return versionSet && default20Off;
+    }
+
+    public static boolean isHttp2EnabledByDefault() {
+        return versionSet && default20On;
     }
 
     /**
@@ -534,6 +596,11 @@ public class CHFWBundle implements ServerQuiesceListener {
         return result != null ? result : ChannelFrameworkFactory.getBufferManager();
     }
 
+    /**
+     * helper method for getting access to the EndPointMgr
+     *
+     * @return EndPointMgr
+     */
     public EndPointMgr getEndpointManager() {
         return EndPointMgrImpl.getRef();
     }

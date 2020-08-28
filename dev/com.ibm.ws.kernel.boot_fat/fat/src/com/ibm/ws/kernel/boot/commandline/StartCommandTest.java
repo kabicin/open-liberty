@@ -30,8 +30,6 @@ import componenttest.topology.utils.LibertyServerUtils;
  */
 public class StartCommandTest {
 
-    private final static double javaLevel = Double.parseDouble(System.getProperty("java.specification.version"));
-
     private final static String defaultServerName = "defaultServer";
     private static Bootstrap bootstrap;
     private static Machine machine;
@@ -87,15 +85,41 @@ public class StartCommandTest {
             String serverXmlPath = defaultServerPath + "/server.xml";
             assertTrue("Expected server.xml file to exist at " + serverXmlPath + ", but does not", LibertyFileManager.libertyFileExists(machine, serverXmlPath));
 
-            // if we are running in a JVM that is version 1.8 or higher, we also need to check for the server.env file
-            if (javaLevel >= 1.8) {
-                String serverEnvPath = defaultServerPath + "/server.env";
-                assertTrue("Expected server.env file to exist at " + serverEnvPath + ", but does not", LibertyFileManager.libertyFileExists(machine, serverEnvPath));
-            }
+            String serverEnvPath = defaultServerPath + "/server.env";
+            assertTrue("Expected server.env file to exist at " + serverEnvPath + ", but does not", LibertyFileManager.libertyFileExists(machine, serverEnvPath));
         } finally {
             po = LibertyServerUtils.executeLibertyCmd(bootstrap, "server", "stop");
             assertEquals("Unexpected return code from server stop command", 0, po.getReturnCode());
         }
 
     }
+
+    /**
+     * Tests the case where the server name does not exist and is not defaultServer.
+     * Server should not start and exit with RC=2. Note the server name utilized is
+     * invalid, however, at the script level its treated as a non-existent server.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testServerDoesntExist() throws Exception {
+
+        ProgramOutput po = null;
+
+        try {
+            // start should fail
+            po = LibertyServerUtils.executeLibertyCmd(bootstrap, "server", "start", "+mytest");
+            assertEquals("Expected return code 2 from server start command STDOUT: \" + po.getStdout() + \" STDERR: \" + po.getStderr()", 2, po.getReturnCode());
+
+            // check that defaultServer directory in NOT created
+            assertTrue("Expected server directory to NOT exist at " + defaultServerPath + ", but does", !LibertyFileManager.libertyFileExists(machine, defaultServerPath));
+
+        } finally {
+            // double check that stop fails as server should never have started or exist
+            po = LibertyServerUtils.executeLibertyCmd(bootstrap, "server", "stop", "+mytest");
+            assertEquals("Expected return code 2 from server stop command STDOUT: \" + po.getStdout() + \" STDERR: \" + po.getStderr()", 2, po.getReturnCode());
+        }
+
+    }
+
 }

@@ -19,6 +19,10 @@ import java.util.List;
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 
+import com.ibm.websphere.ras.Tr;
+import com.ibm.websphere.ras.TraceComponent;
+import com.ibm.ws.ffdc.annotation.FFDCIgnore;
+import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.BetaUtils;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.Callback;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.ConsumerRebalanceListener;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.ConsumerRecord;
@@ -30,6 +34,7 @@ import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.KafkaConsumer;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.KafkaProducer;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.OffsetAndMetadata;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.OffsetCommitCallback;
+import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.ProducerRecord;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.RecordMetadata;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.TopicPartition;
 import com.ibm.ws.microprofile.reactive.messaging.kafka.adapter.WakeupException;
@@ -39,12 +44,16 @@ import com.ibm.ws.microprofile.reactive.messaging.kafka.classloader.AppLibraryCl
 @ApplicationScoped
 public class AdapterFactoryImpl extends KafkaAdapterFactory {
 
+    private static final TraceComponent tc = Tr.register(AdapterFactoryImpl.class);
+
     private ClassLoader appLibLoader;
 
     @PostConstruct
+    @FFDCIgnore(KafkaAdapterException.class)
     private void init() {
         this.appLibLoader = AccessController.doPrivileged((PrivilegedAction<ClassLoader>) () -> {
             List<Class<?>> interfaces = Arrays.asList(KafkaAdapterFactory.class,
+                                                      BetaUtils.class,
                                                       Callback.class,
                                                       ConsumerRebalanceListener.class,
                                                       ConsumerRecord.class,
@@ -55,6 +64,7 @@ public class AdapterFactoryImpl extends KafkaAdapterFactory {
                                                       KafkaProducer.class,
                                                       OffsetAndMetadata.class,
                                                       OffsetCommitCallback.class,
+                                                      ProducerRecord.class,
                                                       RecordMetadata.class,
                                                       TopicPartition.class,
                                                       WakeupException.class);
@@ -63,6 +73,13 @@ public class AdapterFactoryImpl extends KafkaAdapterFactory {
 
             return new AppLibraryClassLoader(urls, interfaces, Thread.currentThread().getContextClassLoader());
         });
+
+        try {
+            validate();
+        } catch (KafkaAdapterException e) {
+            Tr.error(tc, e.getMessage());
+            throw e;
+        }
     }
 
     @Override

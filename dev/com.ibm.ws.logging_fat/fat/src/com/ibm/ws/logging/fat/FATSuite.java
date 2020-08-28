@@ -1,6 +1,5 @@
 /*************************************************************************
- * ******
- * Copyright (c) 2011, 2019 IBM Corporation and others.
+ * Copyright (c) 2011, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -26,6 +25,7 @@ import org.junit.runners.Suite.SuiteClasses;
                 StackTraceFilteringForNoClassDefFoundErrorTest.class, StackTraceFilteringForBadlyWrittenThrowableTest.class,
                 StackTraceFilteringForIBMFeatureExceptionTest.class, StackTraceFilteringForUserFeatureExceptionTest.class,
                 StackTraceFilteringForSpecificationClassesExceptionTest.class,
+                StackTraceJoinerTest.class,
                 InvalidTraceSpecificationTest.class,
                 HealthCenterTest.class,
                 TestHideMessages.class,
@@ -35,7 +35,10 @@ import org.junit.runners.Suite.SuiteClasses;
                 HeaderFormatTest.class,
                 LogServiceTest.class,
                 RealFlushTest.class,
-                JSONFieldsTest.class
+                JSONFieldsTest.class,
+                ConsoleFormatTest.class,
+                CustomAccessLogFieldsTest.class,
+                TraceInjectionTest.class
 })
 
 public class FATSuite {

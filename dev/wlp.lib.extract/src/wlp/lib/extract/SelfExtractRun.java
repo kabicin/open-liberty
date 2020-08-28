@@ -147,6 +147,7 @@ public class SelfExtractRun extends SelfExtract {
         // if so, return it and done
         if (extractDirVar != null && extractDirVar.length() > 0) {
             String retVal = createIfNeeded(extractDirVar.trim());
+            extractDirPredefined = true;
             return retVal;
         } else {
 
@@ -270,8 +271,7 @@ public class SelfExtractRun extends SelfExtract {
         outputReader.start();
 
         // now setup the shutdown hook
-        Runtime.getRuntime().addShutdownHook(new Thread(new ShutdownHook(platformType, extractDirectory, serverName, outputReader, errorReader)));
-
+        Runtime.getRuntime().addShutdownHook(new Thread(new ShutdownHook(platformType, extractDirectory, serverName, outputReader, errorReader, extractDirPredefined)));
         // wait on server start process to complete, capture and pass on return code
         rc = proc.waitFor();
 
@@ -298,14 +298,17 @@ public class SelfExtractRun extends SelfExtract {
                 try {
                     String serverName = getServerName();
                     if (shouldRunInJVM(extractDirectory, serverName)) {
+                        // single jvm non-debug path
                         rc = runServerInline(extractDirectory, serverName, args);
                     } else {
+                        // double jvm debug path
                         rc = runServer(extractDirectory, serverName, args);
                     }
                 } catch (Exception e) {
                     throw new RuntimeException("Failed to run jar due to error " + e.getMessage(), e);
                 }
             }
+
             System.exit(rc);
         }
 
@@ -326,6 +329,7 @@ public class SelfExtractRun extends SelfExtract {
     private static int runServerInline(String extractDirectory,
                                        String serverName,
                                        String[] args) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+
         File serverLaunchJar = new File(extractDirectory, "wlp/bin/tools/ws-server.jar");
         JarFile jar = new JarFile(serverLaunchJar);
         String className = jar.getManifest().getMainAttributes().getValue("Main-Class");
@@ -339,6 +343,8 @@ public class SelfExtractRun extends SelfExtract {
 
         Properties props = System.getProperties();
 
+        // Setting this tells us the boostrap to ignore any WLP_USER_DIR that happens to be set from the env
+        props.setProperty("wlp.ignore.user.dir.from.env", "true");
         props.setProperty("user.dir", new File(extractDirectory, "wlp" + File.separator + "usr" + File.separator + "servers" + File.separator + serverName).getAbsolutePath());
         props.setProperty("LOG_DIR",
                           extractDirectory + File.separator + "wlp" + File.separator + "usr" + File.separator + "servers" + File.separator + serverName + File.separator + "logs");
@@ -351,6 +357,9 @@ public class SelfExtractRun extends SelfExtract {
             argList.addAll(Arrays.asList(args));
         }
         Method m = clazz.getDeclaredMethod("main", new Class[] { String[].class });
+
+        // Add the shutdown hook to clean up
+        Runtime.getRuntime().addShutdownHook(new Thread(new ShutdownHook(platformType, extractDirectory, serverName, null, null, extractDirPredefined)));
 
         attachJavaAgent(extractDirectory);
 

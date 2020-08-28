@@ -3,7 +3,7 @@ symbolicName=com.ibm.websphere.appserver.openidConnectClient-1.0
 visibility=public
 IBM-API-Package: com.ibm.websphere.security.openidconnect; type="ibm-api"
 IBM-ShortName: openidConnectClient-1.0
-Subsystem-Name: OpenID Connect Client
+Subsystem-Name: OpenID Connect Client 1.0
 # due to ConvergedClientConfig having jwt deps, oidc client now has jwt deps.
 -features=com.ibm.websphere.appserver.javax.cdi-1.0; ibm.tolerates:="1.2,2.0"; apiJar=false, \
   com.ibm.websphere.appserver.oauth-2.0, \
@@ -18,7 +18,7 @@ Subsystem-Name: OpenID Connect Client
   com.ibm.ws.org.joda.time.1.6.2, \
   com.ibm.ws.com.google.guava, \
   com.ibm.json4j, \
-  com.ibm.ws.org.apache.commons.codec.1.4, \
+  com.ibm.ws.org.apache.commons.codec, \
   com.ibm.ws.security.openidconnect.client, \
   com.ibm.ws.org.apache.commons.logging.1.0.3, \
   com.ibm.ws.security.openidconnect.common, \
@@ -27,7 +27,6 @@ Subsystem-Name: OpenID Connect Client
   com.ibm.ws.com.google.gson.2.2.4, \
   com.ibm.ws.org.jose4j, \
   com.ibm.ws.org.json.simple.1.1.1, \
-  com.ibm.ws.webcontainer.security.provider, \
   com.ibm.websphere.appserver.api.oidc; location:=dev/api/ibm/
 -files=dev/api/ibm/javadoc/com.ibm.websphere.appserver.api.oidc_1.0-javadoc.zip
 kind=ga

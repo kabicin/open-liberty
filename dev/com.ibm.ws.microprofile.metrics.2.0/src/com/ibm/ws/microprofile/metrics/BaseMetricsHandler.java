@@ -28,7 +28,6 @@ import com.ibm.ws.microprofile.metrics.impl.SharedMetricRegistries;
 import com.ibm.ws.microprofile.metrics.writer.JSONMetadataWriter;
 import com.ibm.ws.microprofile.metrics.writer.JSONMetricWriter;
 import com.ibm.ws.microprofile.metrics.writer.OutputWriter;
-import com.ibm.ws.microprofile.metrics.writer.PrometheusMetricWriter;
 import com.ibm.wsspi.rest.handler.RESTHandler;
 import com.ibm.wsspi.rest.handler.RESTRequest;
 import com.ibm.wsspi.rest.handler.RESTResponse;
@@ -38,7 +37,8 @@ public abstract class BaseMetricsHandler implements RESTHandler {
     private static final TraceComponent tc = Tr.register(BaseMetricsHandler.class);
 
     protected BaseMetrics bm;
-    protected SharedMetricRegistries sharedMetricRegistry;
+    public SharedMetricRegistries sharedMetricRegistry;
+    protected WriterFactory writerFactory;
 
     @Override
     @FFDCIgnore({ EmptyRegistryException.class, NoSuchMetricException.class, NoSuchRegistryException.class, HTTPNotAcceptableException.class, HTTPMethodNotAllowedException.class })
@@ -103,7 +103,8 @@ public abstract class BaseMetricsHandler implements RESTHandler {
         }
     }
 
-    private OutputWriter getOutputWriter(RESTRequest request, RESTResponse response, Locale locale) throws IOException, HTTPNotAcceptableException, HTTPMethodNotAllowedException {
+    protected OutputWriter getOutputWriter(RESTRequest request, RESTResponse response,
+                                           Locale locale) throws IOException, HTTPNotAcceptableException, HTTPMethodNotAllowedException {
         String method = request.getMethod();
         String accept = request.getHeader(Constants.ACCEPT_HEADER);
         Writer writer = response.getWriter();
@@ -126,16 +127,16 @@ public abstract class BaseMetricsHandler implements RESTHandler {
             }
 
             if (theAcceptableFormat != null && theAcceptableFormat.getAcceptableFormat().equals(Constants.ACCEPT_HEADER_TEXT)) {
-                return new PrometheusMetricWriter(writer, locale);
+                return writerFactory.getPrometheusMetricsWriter(writer, locale);
             } else if (theAcceptableFormat != null && theAcceptableFormat.getAcceptableFormat().equals(Constants.ACCEPT_HEADER_JSON)) {
-                return new JSONMetricWriter(writer);
+                return writerFactory.getJSONMetricWriter(writer);
             } else {
                 //invalid header
                 throw new HTTPNotAcceptableException();
             }
         } else if (Constants.METHOD_OPTIONS.equals(method)) {
             if (accept.contains(Constants.ACCEPT_HEADER_JSON)) {
-                return new JSONMetadataWriter(writer, locale);
+                return writerFactory.getJSONMetadataWriter(writer, locale);
             } else {
                 throw new HTTPNotAcceptableException();
             }
@@ -166,7 +167,7 @@ public abstract class BaseMetricsHandler implements RESTHandler {
     }
 
     //MPM2-REVIEW
-    private AcceptableFormat compareAF(AcceptableFormat theAcceptableFormat, String acceptHeaderElement, String curAcceptHeaderConstant) {
+    protected AcceptableFormat compareAF(AcceptableFormat theAcceptableFormat, String acceptHeaderElement, String curAcceptHeaderConstant) {
         double q = resolveQFactor(acceptHeaderElement);
 
         if (theAcceptableFormat == null ||
@@ -200,7 +201,7 @@ public abstract class BaseMetricsHandler implements RESTHandler {
         return s;
     }
 
-    private class AcceptableFormat {
+    public class AcceptableFormat {
         private final String acceptableFormat;
         private final double acceptableFormatWeight;
 

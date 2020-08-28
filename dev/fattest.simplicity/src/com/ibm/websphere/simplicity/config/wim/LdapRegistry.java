@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017, 2018 IBM Corporation and others.
+ * Copyright (c) 2017, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -45,12 +45,14 @@ public class LdapRegistry extends ConfigElement {
     private LdapFilters idsFilters;
     private Boolean ignoreCase;
     private LdapFilters iplanetFilters;
+    private Boolean jndiOutputEnabled;
     private LdapCache ldapCache;
     private ConfigElementList<LdapEntityType> ldapEntityTypes;
     private String ldapType;
     private String name; // PRIVATE
     private LdapFilters netscapeFilters;
     private String port; // Integer in metatype, but need to support properties.
+    private Integer primaryServerQueryTimeInterval;
     private String realm;
     private Boolean recursiveSearch;
     private String referal; // PRIVATE
@@ -207,6 +209,13 @@ public class LdapRegistry extends ConfigElement {
     }
 
     /**
+     * @return the jndiOutputEnabled
+     */
+    public Boolean getJndiOutputEnabled() {
+        return jndiOutputEnabled;
+    }
+
+    /**
      * @return the ldapCache
      */
     public LdapCache getLdapCache() {
@@ -246,6 +255,13 @@ public class LdapRegistry extends ConfigElement {
      */
     public String getPort() {
         return port;
+    }
+
+    /**
+     * @return the primaryServerQueryTimeInterval
+     */
+    public Integer getPrimaryServerQueryTimeInterval() {
+        return primaryServerQueryTimeInterval;
     }
 
     /**
@@ -510,6 +526,14 @@ public class LdapRegistry extends ConfigElement {
     }
 
     /**
+     * @param jndiOutputEnabled the jndiOutputEnabled to set
+     */
+    @XmlAttribute(name = "jndiOutputEnabled")
+    public void setJndiOutputEnabled(Boolean jndiOutputEnabled) {
+        this.jndiOutputEnabled = jndiOutputEnabled;
+    }
+
+    /**
      * @param ldapCache the ldapCache to set
      */
     @XmlElement(name = "ldapCache")
@@ -555,6 +579,14 @@ public class LdapRegistry extends ConfigElement {
     @XmlAttribute(name = "port")
     public void setPort(String port) {
         this.port = port;
+    }
+
+    /**
+     * @param primaryServerQueryTimeInterval the primaryServerQueryTimeInterval to set
+     */
+    @XmlAttribute(name = "primaryServerQueryTimeInterval")
+    public void setPrimaryServerQueryTimeInterval(Integer primaryServerQueryTimeInterval) {
+        this.primaryServerQueryTimeInterval = primaryServerQueryTimeInterval;
     }
 
     /**
@@ -727,6 +759,9 @@ public class LdapRegistry extends ConfigElement {
         if (iplanetFilters != null) {
             sb.append("iplanetFilters=\"").append(iplanetFilters).append("\" ");;
         }
+        if (jndiOutputEnabled != null) {
+            sb.append("jndiOutputEnabled=\"").append(jndiOutputEnabled).append("\" ");;
+        }
         if (ldapCache != null) {
             sb.append("ldapCache=\"").append(ldapCache).append("\" ");;
         }
@@ -744,6 +779,9 @@ public class LdapRegistry extends ConfigElement {
         }
         if (port != null) {
             sb.append("port=\"").append(port).append("\" ");;
+        }
+        if (primaryServerQueryTimeInterval != null) {
+            sb.append("primaryServerQueryTimeInterval=\"").append(primaryServerQueryTimeInterval).append("\" ");;
         }
         if (realm != null) {
             sb.append("realm=\"").append(realm).append("\" ");;

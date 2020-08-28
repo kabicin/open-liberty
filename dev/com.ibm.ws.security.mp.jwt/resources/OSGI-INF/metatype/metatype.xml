@@ -38,6 +38,7 @@
             required="false" type="Boolean"  default="true" />
         <AD id="authFilterRef" name="%authFilterRef" description="%authFilterRef.desc" ibm:type="pid" ibm:reference="com.ibm.ws.security.authentication.filter" required="false" type="String"  />
         <AD id="hostNameVerificationEnabled" name="internal" description="internal use only" required="false" type="Boolean" default="false"/>
+        <AD id="authorizationHeaderScheme" name="internal" description="internal use only" required="false" type="String" default="Bearer "/>
         <AD id="clockSkew" name="%clockSkew" description="%clockSkew.desc" required="false" type="String" default="5m" ibm:type="duration" />
         <AD id="ignoreApplicationAuthMethod" name="%ignoreApplicationAuthMethod"  description="%ignoreApplicationAuthMethod.desc"
             required="false" type="Boolean"  default="true" />
@@ -45,9 +46,16 @@
         <AD id="sharedKey" name="%sharedKey" description="%sharedKey.desc" required="false" type="String" ibm:type="password" />
         <AD id="useSystemPropertiesForHttpClientConnections" name="%useSystemPropertiesForHttpClientConnections" description="%useSystemPropertiesForHttpClientConnections.desc" required="false" type="Boolean" default="false"/>
                     
-        <AD id="signatureAlgorithm" required="false" type="String" name="%signatureAlgorithm" description="%signatureAlgorithm.desc" default="RS256">
+        <AD id="signatureAlgorithm" required="false" type="String" name="%signatureAlgorithm" description="%signatureAlgorithm.desc" >
             <Option label="%tokenSignAlgorithm.RS256" value="RS256" />
+            <Option label="internal" value="RS384" />
+            <Option label="internal" value="RS512" />
             <Option label="%tokenSignAlgorithm.HS256" value="HS256" />
+            <Option label="internal" value="HS384" />
+            <Option label="internal" value="HS512" />
+            <Option label="internal" value="ES256" />
+            <Option label="internal" value="ES384" />
+            <Option label="internal" value="ES512" />
         </AD>
     </OCD>
 

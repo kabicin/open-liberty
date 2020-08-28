@@ -46,19 +46,19 @@ import com.ibm.ws.security.oidc.common.AbstractOidcRegistrationBaseTest;
 import test.common.SharedOutputManager;
 
 /**
- * This unit test is running with XOR enabled for the client secret
+ * Common Test
  */
-public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBaseTest {
-    private static SharedOutputManager outputMgr;
+public abstract class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBaseTest {
+    protected static SharedOutputManager outputMgr;
 
     public static final String PROVIDER_NAME = "CachedOidcOP";
     private static final String JDBC_PROVIDER = "jdbc/OAuth2DB";
     private static final String SCHEMA = "OAuthDBSchema";
     private static final String TABLE_NAME = "OAUTH20CLIENTCONFIG";
-    private static final String SCHEMA_TABLE_NAME = SCHEMA + "." + TABLE_NAME;
+    protected static final String SCHEMA_TABLE_NAME = SCHEMA + "." + TABLE_NAME;
     private static final String REQUEST_URL_STRING = "https://localhost:8020/oidc/endpoint/" + PROVIDER_NAME + "/registration";
-    private static final String[] EMPTY_STRING_ARR = new String[0];
-    private static List<OidcBaseClient> SAMPLE_CLIENTS = null;
+    protected static final String[] EMPTY_STRING_ARR = new String[0];
+    protected static List<OidcBaseClient> SAMPLE_CLIENTS = null;
 
     public interface MockInterface {
         void addClientToDB() throws SQLException, OidcServerException;
@@ -111,21 +111,7 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
     }
 
     @Before
-    public void setupBefore() {
-        String methodName = "setupBefore";
-        _testName = testName.getMethodName();
-        System.out.println("Entering test: " + _testName);
-        CachedDBOidcClientProvider oidcBaseClientProvider = invokeConstructorAndInitialize();
-
-        instantiateMockProvider();
-        try {
-            deleteAllClientsInDB(oidcBaseClientProvider);
-            insertSampleClientsToDb(oidcBaseClientProvider);
-
-        } catch (Throwable t) {
-            outputMgr.failWithThrowable(methodName, t);
-        }
-    }
+    abstract public void setupBefore();
 
     @After
     public void tearDown() throws Exception {
@@ -133,7 +119,7 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
         System.out.println("Exiting test: " + _testName);
     }
 
-    private void instantiateMockProvider() {
+    protected void instantiateMockProvider() {
         mockProvider = new CachedDBOidcClientProvider(PROVIDER_NAME, InitialContextFactoryMock.dsMock, SCHEMA_TABLE_NAME, null, null, EMPTY_STRING_ARR) {
             @Override
             void addClientToDB(Connection conn, OidcBaseClientDBModel clientDbModel) throws SQLException, OidcServerException {
@@ -187,7 +173,7 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
         };
     }
 
-    private void deleteAllClientsInDB(CachedDBOidcClientProvider oidcBaseClientProvider) throws OidcServerException {
+    protected void deleteAllClientsInDB(CachedDBOidcClientProvider oidcBaseClientProvider) throws OidcServerException {
         Collection<OidcBaseClient> clients = oidcBaseClientProvider.getAll();
         if (clients.size() > 0) {
             for (OidcBaseClient client : clients) {
@@ -198,7 +184,7 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
         assertEquals("Task to clean db of all clients failed.", 0, oidcBaseClientProvider.getAll().size());
     }
 
-    private void insertSampleClientsToDb(CachedDBOidcClientProvider oidcBaseClientProvider) throws OidcServerException {
+    protected void insertSampleClientsToDb(CachedDBOidcClientProvider oidcBaseClientProvider) throws OidcServerException {
         for (int i = 0; i < SAMPLE_CLIENTS.size(); i++) {
             if (i == 0) {
                 InitialContextFactoryMock.addEntryToOldOAuth20ClientConfigTable();
@@ -332,9 +318,9 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 OidcBaseClient result = mockProvider.put(baseClient);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
+            } catch (OidcServerException e) {
                 String operation = "INSERT";
-                verifyExceptionPerformingDBOperation(e, operation, clientId);
+                verifyExceptionPerformingDBOperationOidc(e, operation, clientId);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -387,9 +373,9 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 OidcBaseClient result = mockProvider.get(clientId);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
+            } catch (OidcServerException e) {
                 String operation = "SELECT";
-                verifyExceptionPerformingDBOperation(e, operation, clientId);
+                verifyExceptionPerformingDBOperationOidc(e, operation, clientId);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -426,8 +412,8 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 Collection<OidcBaseClient> result = mockProvider.getAll();
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
-                verifyExceptionGettingAllClients(e);
+            } catch (OidcServerException e) {
+                verifyExceptionGettingAllClientsOidc(e);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -492,8 +478,8 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 Collection<OidcBaseClient> result = mockProvider.getAll(request);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
-                verifyExceptionGettingAllClients(e);
+            } catch (OidcServerException e) {
+                verifyExceptionGettingAllClientsOidc(e);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -532,9 +518,9 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 boolean result = mockProvider.exists(clientId);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
+            } catch (OidcServerException e) {
                 String operation = "SELECT";
-                verifyExceptionPerformingDBOperation(e, operation, clientId);
+                verifyExceptionPerformingDBOperationOidc(e, operation, clientId);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -575,9 +561,9 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 boolean result = mockProvider.validateClient(clientId, clientPwd);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
+            } catch (OidcServerException e) {
                 String operation = "SELECT";
-                verifyExceptionPerformingDBOperation(e, operation, clientId);
+                verifyExceptionPerformingDBOperationOidc(e, operation, clientId);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -649,9 +635,9 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 OidcBaseClient result = mockProvider.update(baseClient);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
+            } catch (OidcServerException e) {
                 String operation = "UPDATE";
-                verifyExceptionPerformingDBOperation(e, operation, clientId);
+                verifyExceptionPerformingDBOperationOidc(e, operation, clientId);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -696,9 +682,9 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
             try {
                 boolean result = mockProvider.delete(clientId);
                 fail("Should have thrown exception but did not. Result was " + result);
-            } catch (Exception e) {
+            } catch (OidcServerException e) {
                 String operation = "DELETE";
-                verifyExceptionPerformingDBOperation(e, operation, clientId);
+                verifyExceptionPerformingDBOperationOidc(e, operation, clientId);
             }
         } catch (Throwable t) {
             outputMgr.failWithThrowable(_testName, t);
@@ -707,12 +693,7 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
 
     /*************************************** Helper methods ***************************************/
 
-    private CachedDBOidcClientProvider invokeConstructorAndInitialize() {
-        CachedDBOidcClientProvider oidcBaseClientProvider = new CachedDBOidcClientProvider(PROVIDER_NAME, InitialContextFactoryMock.dsMock, SCHEMA_TABLE_NAME, null, null, EMPTY_STRING_ARR);
-        oidcBaseClientProvider.initialize();
-
-        return oidcBaseClientProvider;
-    }
+    abstract protected CachedDBOidcClientProvider invokeConstructorAndInitialize();
 
     private void assertClientEquals(OidcBaseClientDBModel expectedClient, OidcBaseClient retrievedClient) {
         // Ensure client retrieve is client expected
@@ -738,17 +719,17 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
     /**
      * Verifies that CWWKS1460E message appears in the exception message and messages.log.
      */
-    void verifyExceptionPerformingDBOperation(Exception e, String operation, final String clientId) {
+    void verifyExceptionPerformingDBOperationOidc(OidcServerException e, String operation, final String clientId) {
         String msgRegex = MessageConstants.CWWKS1460E_ERROR_PERFORMING_DB_OPERATION + ".+" + operation + ".+" + clientId;
-        verifyExceptionAndLogMessages(e, msgRegex);
+        verifyExceptionAndLogMessagesOidc(e, msgRegex);
     }
 
     /**
      * Verifies that CWWKS1461E message appears in the exception message and messages.log.
      */
-    void verifyExceptionGettingAllClients(Exception e) {
+    void verifyExceptionGettingAllClientsOidc(OidcServerException e) {
         String msgRegex = MessageConstants.CWWKS1461E_ERROR_GETTING_CLIENTS_FROM_DB;
-        verifyExceptionAndLogMessages(e, msgRegex);
+        verifyExceptionAndLogMessagesOidc(e, msgRegex);
     }
 
     /**
@@ -758,6 +739,12 @@ public class CachedDBOidcClientProviderTest extends AbstractOidcRegistrationBase
     void verifyExceptionAndLogMessages(Exception e, String msgRegex) {
         verifyException(e, msgRegex);
         assertFalse("Exception message should not have contained SQL exception message but did.", e.getLocalizedMessage().contains(defaultExceptionMsg));
+        verifyLogMessage(outputMgr, msgRegex + ".+" + Pattern.quote(defaultExceptionMsg));
+    }
+
+    void verifyExceptionAndLogMessagesOidc(OidcServerException e, String msgRegex) {
+        verifyExceptionString(e.getErrorDescription(), msgRegex);
+        assertFalse("Exception message should not have contained SQL exception message but did.", e.getErrorDescription().contains(defaultExceptionMsg));
         verifyLogMessage(outputMgr, msgRegex + ".+" + Pattern.quote(defaultExceptionMsg));
     }
 

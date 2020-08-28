@@ -13,16 +13,15 @@ package com.ibm.ws.microprofile.reactive.messaging.fat.kafka.ack.auto;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 
-import java.time.Duration;
-
 import javax.inject.Inject;
 import javax.servlet.annotation.WebServlet;
 
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.junit.Test;
 
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.common.KafkaTestConstants;
 import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.KafkaTestClient;
-import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.SimpleKafkaWriter;
+import com.ibm.ws.microprofile.reactive.messaging.fat.kafka.framework.KafkaWriter;
 
 import componenttest.app.FATServlet;
 
@@ -39,8 +38,6 @@ public class KafkaAutoAckTestServlet extends FATServlet {
      */
     public static final String APP_GROUPID = "auto-ack-app-group";
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(30);
-
     @Inject
     private KafkaTestClient kafkaTestClient;
 
@@ -53,25 +50,25 @@ public class KafkaAutoAckTestServlet extends FATServlet {
         long offset = kafkaTestClient.getTopicOffset(KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
 
         // Send message directly
-        SimpleKafkaWriter<String> writer = kafkaTestClient.writerFor(KafkaAutoAckReceptionBean.CHANNEL_IN);
+        KafkaWriter<String, String> writer = kafkaTestClient.writerFor(KafkaAutoAckReceptionBean.CHANNEL_IN);
         writer.sendMessage("test1");
 
         // Assert message received
-        Message<String> message1 = receptionBean.getReceivedMessages(1, TIMEOUT).get(0);
+        Message<String> message1 = receptionBean.assertReceivedMessages(1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT).get(0);
         assertThat(message1.getPayload(), is("test1"));
 
         // Assert that the partition offset is committed
-        kafkaTestClient.assertTopicOffsetAdvancesTo(offset + 1, TIMEOUT, KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
+        kafkaTestClient.assertTopicOffsetAdvancesTo(offset + 1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT, KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
 
         // Send another message
         writer.sendMessage("test2");
 
         // Assert message received
-        Message<String> message2 = receptionBean.getReceivedMessages(1, TIMEOUT).get(0);
+        Message<String> message2 = receptionBean.assertReceivedMessages(1, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT).get(0);
         assertThat(message2.getPayload(), is("test2"));
 
         // Assert the partition offset is committed
-        kafkaTestClient.assertTopicOffsetAdvancesTo(offset + 2, TIMEOUT, KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
+        kafkaTestClient.assertTopicOffsetAdvancesTo(offset + 2, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT, KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
 
         // Ack message 1 and assert the partition offset does not go backwards
         message1.ack();
@@ -88,16 +85,16 @@ public class KafkaAutoAckTestServlet extends FATServlet {
         long offset = kafkaTestClient.getTopicOffset(KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
 
         // Send 30 messages
-        SimpleKafkaWriter<String> writer = kafkaTestClient.writerFor(KafkaAutoAckReceptionBean.CHANNEL_IN);
+        KafkaWriter<String, String> writer = kafkaTestClient.writerFor(KafkaAutoAckReceptionBean.CHANNEL_IN);
         for (int i = 0; i < 30; i++) {
             writer.sendMessage("test-" + i);
         }
 
         // Assert 10 messages received
-        receptionBean.getReceivedMessages(30, TIMEOUT);
+        receptionBean.assertReceivedMessages(30, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT);
 
         // Assert that the partition offset is committed
-        kafkaTestClient.assertTopicOffsetAdvancesTo(offset + 30, TIMEOUT, KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
+        kafkaTestClient.assertTopicOffsetAdvancesTo(offset + 30, KafkaTestConstants.DEFAULT_KAFKA_TIMEOUT, KafkaAutoAckReceptionBean.CHANNEL_IN, APP_GROUPID);
     }
 
 }

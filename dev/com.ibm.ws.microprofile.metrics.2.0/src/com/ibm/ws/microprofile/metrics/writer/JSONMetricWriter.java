@@ -78,18 +78,18 @@ public class JSONMetricWriter implements OutputWriter {
         serialize(payload);
     }
 
-    private JSONObject getMetricsAsJson(String registryName) throws NoSuchRegistryException, EmptyRegistryException {
+    protected JSONObject getMetricsAsJson(String registryName) throws NoSuchRegistryException, EmptyRegistryException {
         return getJsonFromMetricMap(Util.getMetricsAsMap(registryName), Util.getMetricsMetadataAsMap(registryName));
     }
 
-    private JSONObject getMetricsAsJson(String registryName, String metricName) throws NoSuchRegistryException, NoSuchMetricException, EmptyRegistryException {
+    protected JSONObject getMetricsAsJson(String registryName, String metricName) throws NoSuchRegistryException, NoSuchMetricException, EmptyRegistryException {
         return getJsonFromMetricMap(Util.getMetricsAsMap(registryName, metricName), Util.getMetricsMetadataAsMap(registryName, metricName));
     }
 
     private static final TraceComponent tc = Tr.register(JSONMetricWriter.class);
 
     @FFDCIgnore({ IllegalStateException.class })
-    private JSONObject getJsonFromMetricMap(Map<MetricID, Metric> metricMap, Map<String, Metadata> metricMetadataMap) {
+    protected JSONObject getJsonFromMetricMap(Map<MetricID, Metric> metricMap, Map<String, Metadata> metricMetadataMap) {
         JSONObject jsonObject = new JSONObject();
 
         //For each Metric that was returned
@@ -175,7 +175,7 @@ public class JSONMetricWriter implements OutputWriter {
     /*
      * After retrieving a map of metrics from the registry
      */
-    private JSONObject getJsonFromMap(Map<String, Number> metricMap, String metricName, JSONObject parentJSONObject) {
+    protected JSONObject getJsonFromMap(Map<String, Number> metricMap, String metricName, JSONObject parentJSONObject) {
 
         /*
          * Check if parent JsonObject has this "metric" already set in it.

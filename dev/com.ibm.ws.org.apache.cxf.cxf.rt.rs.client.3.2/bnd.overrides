@@ -3,7 +3,6 @@ bVersion=1.0
 
 Bundle-SymbolicName: com.ibm.ws.org.apache.cxf.cxf.rt.rs.client.3.2
 
-Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
 
 Import-Package: \
   !com.ctc.wstx.*,\
@@ -19,4 +18,12 @@ Export-Package: com.ibm.ws.jaxrs21.clientconfig,\
   org.apache.cxf.jaxrs.client;version=3.3.0,\
   org.apache.cxf.jaxrs.client.blueprint;version=3.3.0,\
   org.apache.cxf.jaxrs.client.spec;version=3.3.0
-  
+ 
+Service-Component: \
+  com.ibm.ws.jaxrs21.clientconfig.JAXRSClientCompletionStageFactoryConfig; \
+  configuration-policy:=ignore; \
+  immediate:=true;\
+  implementation:=com.ibm.ws.jaxrs21.clientconfig.JAXRSClientCompletionStageFactoryConfig; \
+  provide:=com.ibm.ws.jaxrs21.clientconfig.JAXRSClientCompletionStageFactoryConfig; \
+  completionStageFactory=com.ibm.ws.concurrent.mp.spi.CompletionStageFactory; \
+  properties:="service.vendor=IBM" 

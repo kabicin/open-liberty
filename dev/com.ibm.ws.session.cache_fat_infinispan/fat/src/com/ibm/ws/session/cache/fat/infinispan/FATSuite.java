@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2018,2019 IBM Corporation and others.
+ * Copyright (c) 2018, 2019 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,30 +12,41 @@ package com.ibm.ws.session.cache.fat.infinispan;
 
 import java.net.HttpURLConnection;
 import java.util.List;
-import java.util.Locale;
 
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
 
+import com.ibm.websphere.simplicity.Machine;
 import com.ibm.websphere.simplicity.log.Log;
 
+import componenttest.topology.impl.LibertyFileManager;
 import componenttest.topology.impl.LibertyServer;
+import componenttest.topology.impl.LibertyServerFactory;
 import componenttest.topology.utils.FATServletClient;
 import componenttest.topology.utils.HttpUtils;
 
 @RunWith(Suite.class)
 @SuiteClasses({
-                // TODO enable tests as we get them converted over to infinispan
                 SessionCacheOneServerTest.class,
                 SessionCacheTwoServerTest.class,
                 SessionCacheTimeoutTest.class,
-                //SessionCacheTwoServerTimeoutTest.class,
-                //HazelcastClientTest.class
+                SessionCacheTwoServerTimeoutTest.class
+                // A separate test suite covers Infinispan client/server scenarios
 })
 
 public class FATSuite {
+
+    @BeforeClass
+    public static void beforeSuite() throws Exception {
+        // Delete the Infinispan jars that might have been left around by previous test buckets.
+        LibertyServer server = LibertyServerFactory.getLibertyServer("com.ibm.ws.session.cache.fat.infinispan.server");
+        Machine machine = server.getMachine();
+        String installRoot = server.getInstallRoot();
+        LibertyFileManager.deleteLibertyDirectoryAndContents(machine, installRoot + "/usr/shared/resources/infinispan");
+    }
 
     public static String run(LibertyServer server, String path, String testMethod, List<String> session) throws Exception {
         HttpURLConnection con = HttpUtils.getHttpConnection(server, path + '?' + FATServletClient.TEST_METHOD + '=' + testMethod);
@@ -65,22 +76,5 @@ public class FATSuite {
         } finally {
             con.disconnect();
         }
-    }
-
-    /**
-     * Checks if multicast should be disabled in Hazelcast. We want to disable multicase on z/OS,
-     * and when the environment variable disable_multicast_in_fats=true.
-     *
-     * If you are seeing a lot of NPE errors while running this FAT bucket you might need to set
-     * disable_multicast_in_fats to true. This has been needed on some personal Linux systems, as
-     * well as when running through a VPN.
-     *
-     * @return true if multicast should be disabled.
-     */
-    public static boolean isMulticastDisabled() {
-        boolean multicastDisabledProp = Boolean.parseBoolean(System.getenv("disable_multicast_in_fats"));
-        String osName = System.getProperty("os.name", "unknown").toLowerCase(Locale.ROOT);
-
-        return (multicastDisabledProp || osName.contains("z/os"));
     }
 }

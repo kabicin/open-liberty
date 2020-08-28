@@ -16,10 +16,15 @@ import org.junit.runners.Suite.SuiteClasses;
 
 import com.ibm.ws.ejbcontainer.timer.persistent.fat.tests.NoDatasourceTest;
 import com.ibm.ws.ejbcontainer.timer.persistent.fat.tests.NoTablesTest;
+import com.ibm.ws.ejbcontainer.timer.persistent.fat.tests.PersistentTimerCoreTest;
+import com.ibm.ws.ejbcontainer.timer.persistent.fat.tests.PersistentTimerRestartTest;
 
 @RunWith(Suite.class)
 @SuiteClasses({
                 NoDatasourceTest.class,
-                NoTablesTest.class
+                NoTablesTest.class,
+                PersistentTimerCoreTest.class,
+                PersistentTimerRestartTest.class
 })
-public class FATSuite {}
+public class FATSuite {
+}

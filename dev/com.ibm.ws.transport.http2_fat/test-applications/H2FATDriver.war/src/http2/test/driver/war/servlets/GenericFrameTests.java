@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2018 IBM Corporation and others.
+ * Copyright (c) 2018, 2019 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -180,15 +180,15 @@ public class GenericFrameTests extends H2FATDriverServlet {
 
         setupDefaultPreface(h2Client);
 
-        // send over a PING frame and expect a response
-        pingFrame = new FramePing(0, pingData, false);
-        h2Client.sendFrame(pingFrame);
-
         // malformed frame: set frame type byte to unknown
         //_________________________||____________________ - frame type byte
         String dataString = "0000060f0000000003414243313233";
         byte[] b = parseHexBinary(dataString);
-        h2Client.sendBytes(b);
+        h2Client.sendBytesAfterPreface(b);
+
+        // send over a PING frame and expect a response
+        pingFrame = new FramePing(0, pingData, false);
+        h2Client.sendFrame(pingFrame);
 
         waitForTestCompletion(blockUntilConnectionIsDone);
         handleErrors(h2Client, testName);

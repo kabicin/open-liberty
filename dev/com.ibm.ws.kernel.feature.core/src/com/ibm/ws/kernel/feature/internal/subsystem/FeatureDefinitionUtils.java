@@ -81,6 +81,7 @@ public class FeatureDefinitionUtils {
 
     public final static Collection<String> ALLOWED_ON_CLIENT_ONLY_FEATURES = Arrays.asList("com.ibm.websphere.appserver.javaeeClient-7.0",
                                                                                            "com.ibm.websphere.appserver.javaeeClient-8.0",
+                                                                                           "io.openliberty.jakartaeeClient-9.0",
                                                                                            "com.ibm.websphere.appserver.appSecurityClient-1.0");
 
     public static final String NL = "\r\n";
@@ -117,7 +118,6 @@ public class FeatureDefinitionUtils {
         final File featureFile;
         final long lastModified;
         final long length;
-        public File checksumFile;
 
         ImmutableAttributes(String repoType,
                             String symbolicName,
@@ -155,9 +155,6 @@ public class FeatureDefinitionUtils {
             this.isSingleton = isSingleton;
 
             this.featureFile = featureFile;
-            if (featureFile != null) {
-                this.checksumFile = new File(featureFile.getParentFile(), "checksums/" + symbolicName + ".cs");
-            }
             this.lastModified = lastModified;
             this.length = fileSize;
         }
@@ -188,6 +185,13 @@ public class FeatureDefinitionUtils {
 
                 return s.toString();
             }
+        }
+
+        File getChecksumFile() {
+            if (featureFile == null) {
+                return null;
+            }
+            return new File(featureFile.getParentFile(), "checksums/" + symbolicName + ".cs");
         }
 
         File getLocalizationDirectory() {

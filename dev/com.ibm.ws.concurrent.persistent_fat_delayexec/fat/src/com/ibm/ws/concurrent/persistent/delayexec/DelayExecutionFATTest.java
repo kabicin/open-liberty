@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2014, 2015, 2019 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -300,6 +300,8 @@ public class DelayExecutionFATTest {
             if (activation == null || activation.isEmpty()) {
                 String activated = server.waitForStringInLog(SERVICE_ACTIVATION);
                 if (activated == null) {
+                	// Generate a server dump for debug if the service does not activate
+                	server.dumpServer("testRescheduleUnderConfigUpdateRun");
                     fail("The TestService did not activate.");
                 }
             }

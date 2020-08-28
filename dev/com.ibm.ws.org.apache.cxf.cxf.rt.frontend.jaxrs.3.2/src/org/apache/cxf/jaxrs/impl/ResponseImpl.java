@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import javax.ws.rs.ProcessingException;
 import javax.ws.rs.client.ResponseProcessingException;
@@ -64,6 +65,7 @@ import org.apache.cxf.jaxrs.utils.HttpUtils;
 import org.apache.cxf.jaxrs.utils.InjectionUtils;
 import org.apache.cxf.jaxrs.utils.JAXRSUtils;
 import org.apache.cxf.message.Message;
+import org.apache.cxf.message.MessageImpl;
 import org.apache.cxf.message.MessageUtils;
 
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
@@ -79,6 +81,8 @@ public final class ResponseImpl extends Response {
     private boolean entityClosed;
     private boolean entityBufferred;
     private Object lastEntity;
+    
+    private static final Pattern linkDelimiter = Pattern.compile(",(?=\\<|$)"); // Liberty Change
 
     ResponseImpl(int statusCode) {
         this.status = createStatusType(statusCode, null);
@@ -316,10 +320,19 @@ public final class ResponseImpl extends Response {
         List<Object> linkValues = metadata.get(HttpHeaders.LINK);
         if (linkValues != null) {
             for (Object o : linkValues) {
-                Link link = o instanceof Link ? (Link)o : Link.valueOf(o.toString());
-                if (relation.equals(link.getRel())) {
+                // Liberty Change Start
+                if (o instanceof Link && relation.equals(((Link)o).getRel())) {
                     return true;
                 }
+                
+                String[] links = linkDelimiter.split(o.toString());
+                for (String splitLink : links) {
+                    Link link = Link.valueOf(splitLink);
+                    if (relation.equals(link.getRel())) {
+                        return true;
+                    }
+                }
+                // Liberty Change End
             }
         }
         return false;
@@ -354,14 +367,40 @@ public final class ResponseImpl extends Response {
         }
         Set<Link> links = new LinkedHashSet<>();
         for (Object o : linkValues) {
-            Link link = o instanceof Link ? (Link)o : Link.valueOf(o.toString());
-            if (!link.getUri().isAbsolute()) {
-                URI requestURI = URI.create((String)outMessage.get(Message.REQUEST_URI));
-                link = Link.fromLink(link).baseUri(requestURI).build();
-            }
-            links.add(link);
+            // Liberty Change Start
+            List<Link> parsedLinks = parseLink(o);
+            links.addAll(parsedLinks);
+            // Liberty Change End
         }
         return links;
+    }
+    
+    // Liberty Change
+    private Link makeAbsoluteLink(Link link) {
+        if (!link.getUri().isAbsolute()) {
+            //Liberty code change start
+            URI requestURI = URI.create((String)((MessageImpl) outMessage).getRequestUri());
+            //Liberty code change end
+            link = Link.fromLink(link).baseUri(requestURI).build();
+        }
+        return link;
+    }
+
+    // Liberty Change
+    private List<Link> parseLink(Object o) {
+        if (o instanceof Link) {
+            return Collections.singletonList(makeAbsoluteLink((Link) o));
+        }
+
+        ArrayList<Link> links = new ArrayList<>();
+        String[] linkArray = linkDelimiter.split(o.toString());
+
+        for (String textLink : linkArray) {
+            Link link = Link.valueOf(textLink);
+            links.add(makeAbsoluteLink(link));
+        }
+
+        return Collections.unmodifiableList(links);
     }
 
     @Override

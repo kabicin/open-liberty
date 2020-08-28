@@ -125,7 +125,7 @@ class BaseConfiguration {
     }
 
     // Depends on there not being an id specified on the singleton. There are no
-    // guarantees here, so this should really go away. 
+    // guarantees here, so this should really go away.
     void getSingletonNames(Set<String> singletons) {
         for (Map.Entry<String, ConfigurationList<SimpleElement>> entry : configurationMap.entrySet()) {
             ConfigurationList<SimpleElement> list = entry.getValue();
@@ -285,7 +285,7 @@ class BaseConfiguration {
 
     /**
      * Get a Map of FactoryElements indexed by ConfigID
-     * 
+     *
      * @param pid The full pid value (must not be null)
      * @param alias The alias value (may be null)
      * @param defaultId If not null, elements in the configuration that don't have an ID will use this
@@ -302,13 +302,13 @@ class BaseConfiguration {
             ConfigID elementId = entry.getKey();
 
             // If there are defaults, create a FactoryElement using them and then override with the
-            // specified values. Otherwise, create a FactoryElement from the configured values. 
+            // specified values. Otherwise, create a FactoryElement from the configured values.
             List<SimpleElement> defaultElements = defaultFactories.remove(elementId);
             if (defaultElements == null) {
                 FactoryElement merged = new FactoryElement(entry.getValue(), pid, elementId.getId());
                 mergedMap.put(elementId, merged);
             } else {
-                // We have factory elements, so first remove any default configuration that is marked "merge if doesn't exist". 
+                // We have factory elements, so first remove any default configuration that is marked "merge if doesn't exist".
                 Iterator<SimpleElement> iter = defaultElements.iterator();
                 while (iter.hasNext()) {
                     SimpleElement element = iter.next();
@@ -319,8 +319,15 @@ class BaseConfiguration {
 
                 if (!defaultElements.isEmpty()) {
                     FactoryElement merged = new FactoryElement(defaultElements, pid, elementId.getId());
-                    // Remove the ID from the list of attributes. If it's specified, it will be added back by the configured values. 
-                    merged.attributes.remove(XMLConfigConstants.CFG_INSTANCE_ID);
+                    // Remove the ID from the list of attributes if its using the non-default ID and
+		    // the element its merging with is using a default ID.
+                    // If it's specified, it will be added back by the configured values.
+                    if (defaultElements.get(0).isUsingNonDefaultId() == true && entry.getValue().get(0).isUsingNonDefaultId() == false) {
+                        merged.attributes.remove(XMLConfigConstants.CFG_INSTANCE_ID);
+			if (tc.isDebugEnabled()) {
+			    Tr.debug(tc, "Removing default id from list of attributes");
+			}
+                    }
                     merged.merge(entry.getValue());
                     mergedMap.put(elementId, merged);
                 } else {
@@ -368,7 +375,7 @@ class BaseConfiguration {
         return variableList;
     }
 
-    public Map<String, ConfigVariable> getVariables() throws ConfigMergeException {
+    public Map<String, ConfigVariable> getVariables() {
         HashMap<String, ConfigVariable> variableMap = new HashMap<String, ConfigVariable>();
         for (Map.Entry<String, List<ConfigVariable>> entry : variables.entrySet()) {
             String variableName = entry.getKey();
@@ -382,7 +389,7 @@ class BaseConfiguration {
                 for (ConfigVariable var : variableList) {
                     if (toReturn == null) {
                         if (var.getMergeBehavior() != MergeBehavior.MERGE_WHEN_EXISTS) {
-                            // Leave the variable as null if behavior is MERGE_WHEN_EXISTS, otherwise set it. 
+                            // Leave the variable as null if behavior is MERGE_WHEN_EXISTS, otherwise set it.
                             toReturn = var;
                         }
 

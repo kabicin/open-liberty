@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 IBM Corporation and others.
+ * Copyright (c) 2014, 2019 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -285,14 +285,8 @@ public class SimulatedControllerTest {
             // Query for partition entries
             runInServlet("test=testFindPartitions&jndiName=concurrent/executor3&executorId=executor1&executorId=executor2&executorId=executor3&executorId=executor4&invokedBy=testFailoverWithFourInstances");
 
-            // Update one of the partition entries
-            runInServlet("test=testUpdatePartitions&jndiName=concurrent/executor3&executorId=executor3&newHostName=abcdefg.rchland.ibm.com&expectedUpdateCount=1&invokedBy=testFailoverWithFourInstances");
-
             // Remove one of the partition entries
-            runInServlet("test=testRemovePartitions&jndiName=concurrent/executor3&hostName=abcdefg.rchland.ibm.com&libertyServer=com.ibm.ws.concurrent.persistent.fat.simctrl&expectedUpdateCount=1&invokedBy=testFailoverWithFourInstances");
-
-            // Attempt an update to the removed partition entry
-            runInServlet("test=testUpdatePartitions&jndiName=concurrent/executor3&executorId=executor3&newHostName=xyz@rchland.ibm.com&expectedUpdateCount=0&invokedBy=testFailoverWithFourInstances");
+            runInServlet("test=testRemovePartitions&jndiName=concurrent/executor3&executorId=executor3&libertyServer=com.ibm.ws.concurrent.persistent.fat.simctrl&expectedUpdateCount=1&invokedBy=testFailoverWithFourInstances");
         } finally {
             // restore original configuration
             server.setMarkToEndOfLog();

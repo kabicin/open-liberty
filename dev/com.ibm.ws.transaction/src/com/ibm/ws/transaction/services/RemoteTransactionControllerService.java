@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015,2019 IBM Corporation and others.
+ * Copyright (c) 2015, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -232,22 +232,22 @@ public class RemoteTransactionControllerService implements RemoteTransactionCont
         final DistributableTransaction tx = getTransactionForID(globalId);
 
         if (tx != null) {
-                // Check the transaction state and action as appropriate
-                switch (tx.getStatus()) {
-                    case Status.STATUS_ACTIVE:
-                    case Status.STATUS_MARKED_ROLLBACK:
-                        tx.enlistAsyncResource(xaResFactoryFilter, xaResInfo, tx.getXid());
-                        break;
+            // Check the transaction state and action as appropriate
+            switch (tx.getStatus()) {
+                case Status.STATUS_ACTIVE:
+                case Status.STATUS_MARKED_ROLLBACK:
+                    tx.enlistAsyncResource(xaResFactoryFilter, xaResInfo, tx.getXid());
+                    break;
 
-                    case Status.STATUS_PREPARING:
-                        tx.setRollbackOnly();
-                        // NOTE no break
+                case Status.STATUS_PREPARING:
+                    tx.setRollbackOnly();
+                    // NOTE no break
 
-                    default:
-                        retval = false; // caller sends InvalidState
-                        break;
+                default:
+                    retval = false; // caller sends InvalidState
+                    break;
 
-                } // end switch
+            } // end switch
         } else {
             retval = false;
         }
@@ -264,8 +264,6 @@ public class RemoteTransactionControllerService implements RemoteTransactionCont
         for (TransactionImpl tx : LocalTIDTable.getAllTransactions()) {
             if (globalId.equals(((DistributableTransaction) tx).getGlobalId())) {
                 return (DistributableTransaction) tx;
-            } else if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                Tr.debug(tc, "Non matching GlobalId: " + ((DistributableTransaction) tx).getGlobalId());
             }
         }
 

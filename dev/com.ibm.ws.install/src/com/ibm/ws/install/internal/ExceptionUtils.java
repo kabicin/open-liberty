@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2018 IBM Corporation and others.
+ * Copyright (c) 2018, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -21,8 +21,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,6 +32,7 @@ import com.ibm.ws.install.InstallConstants;
 import com.ibm.ws.install.InstallException;
 import com.ibm.ws.install.internal.InstallLogUtils.Messages;
 import com.ibm.ws.install.repository.download.RepositoryDownloadUtil;
+import com.ibm.ws.kernel.feature.resolver.FeatureResolver;
 import com.ibm.ws.kernel.productinfo.DuplicateProductInfoException;
 import com.ibm.ws.kernel.productinfo.ProductInfo;
 import com.ibm.ws.kernel.productinfo.ProductInfoParseException;
@@ -52,6 +55,8 @@ import wlp.lib.extract.SelfExtractor;
  */
 public class ExceptionUtils {
 
+    private static boolean isFeatureUtil = false;
+
     /**
      * Checks if cause is an instance of CertPathBuilderException
      *
@@ -69,9 +74,9 @@ public class ExceptionUtils {
     /**
      * Create an install exception from an existing exception and message key
      *
-     * @param e Original exception
+     * @param e      Original exception
      * @param msgKey Key of the message
-     * @param args Arguments for the message
+     * @param args   Arguments for the message
      * @return Created Install Exception
      */
     public static InstallException createByKey(Exception e, String msgKey, Object... args) {
@@ -291,6 +296,99 @@ public class ExceptionUtils {
     }
 
     /**
+     * Return a String containing one of more singleton incompatibility exceptions if they exist.
+     *
+     * @param featureChain
+     * @return
+     */
+    private static String checkForSingletonException(Map<String, Collection<FeatureResolver.Chain>> featureChain) {
+        StringBuilder sb = new StringBuilder();
+
+        List<String> offendingFeatures;
+        for (String featureFullName : featureChain.keySet()) {
+            offendingFeatures = new ArrayList<>();
+            Collection<FeatureResolver.Chain> chainList = featureChain.get(featureFullName);
+            for (FeatureResolver.Chain chain : chainList) {
+                for (String candidate : chain.getCandidates()) {
+                    String shortname = getFeatureShortname(candidate);
+                    if (!offendingFeatures.contains(shortname)) {
+                        offendingFeatures.add(shortname);
+                    }
+                }
+            }
+            // determine which message to use
+            if (offendingFeatures.size() == 2) {
+                String f1 = offendingFeatures.get(0);
+                String f2 = offendingFeatures.get(1);
+                sb.append(Messages.INSTALL_KERNEL_MESSAGES.getMessage("ERROR_INCOMPATIBLE_FEATURES_SINGLETON", f1, f2)).append("\n");
+            } else {
+                StringBuilder nMinusOneFeatures = new StringBuilder();
+                for (String feature : offendingFeatures.subList(0, offendingFeatures.size() - 1)) {
+                    nMinusOneFeatures.append(feature).append(",");
+                }
+                String lastFeature = offendingFeatures.get(offendingFeatures.size() - 1);
+                sb.append(Messages.INSTALL_KERNEL_MESSAGES.getMessage("ERROR_INCOMPATIBLE_FEATURES_SINGLETON", nMinusOneFeatures.toString(), lastFeature)).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String checkForIncompatibleFeatureException(Map<String, Collection<FeatureResolver.Chain>> featureChain, Set<String> topAssets) {
+        Set<Set<String>> offendingFeaturePairs = new HashSet<>();
+        StringBuilder sb = new StringBuilder();
+
+        // loop through feature conflicts
+        for (String featureFamilyName : featureChain.keySet()) {
+            Set<String> off = new HashSet<>();
+            Collection<FeatureResolver.Chain> chainList = featureChain.get(featureFamilyName);
+            for (FeatureResolver.Chain chain : chainList) {
+                for (String featureName : chain.getChain()) {
+                    String sname = getFeatureShortname(featureName);
+                    if (topAssets.contains(sname)) {
+                        off.add(sname);
+                    }
+                }
+            }
+            if (off.size() > 1) {
+                offendingFeaturePairs.add(off);
+            }
+
+        }
+        if (!!!offendingFeaturePairs.isEmpty()) {
+            // TODO remove subsets?
+            for (Set<String> p : offendingFeaturePairs) {
+                List<String> pair = new ArrayList<>(p);
+
+                // determine which message to use
+                if (pair.size() == 2) {
+                    String f1 = pair.get(0);
+                    String f2 = pair.get(1);
+                    sb.append(Messages.INSTALL_KERNEL_MESSAGES.getMessage("ERROR_INCOMPATIBLE_FEATURES", f1, f2)).append("\n");
+                } else {
+                    StringBuilder nMinusOneFeatures = new StringBuilder();
+                    for (String feature : pair.subList(0, pair.size() - 1)) {
+                        nMinusOneFeatures.append(feature).append(",");
+                    }
+                    String lastFeature = pair.get(pair.size() - 1);
+                    sb.append(Messages.INSTALL_KERNEL_MESSAGES.getMessage("ERROR_INCOMPATIBLE_FEATURES", nMinusOneFeatures.toString(), lastFeature)).append("\n");
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    // ex: turns com.ibm.websphere.appserver.mpHealth-2.0 into mpHealth-2.0
+    private static String getFeatureShortname(String feature) {
+        String[] split = feature.split("\\.");
+        int len = split.length;
+        if (len <= 2) {
+            return feature;
+        }
+
+        return split[len - 2] + "." + split[len - 1];
+    }
+
+    /**
      * Create an install exception from a repository resolution exception and asset names
      *
      * @param e
@@ -303,6 +401,172 @@ public class ExceptionUtils {
     static InstallException create(RepositoryResolutionException e, Collection<String> assetNames, File installDir, boolean installingAsset,
                                    boolean isOpenLiberty) {
         Collection<MissingRequirement> allRequirementsNotFound = e.getAllRequirementsResourcesNotFound();
+        // resolveAsSet singleton features exception check
+        if (allRequirementsNotFound.isEmpty()) {
+            String msg = checkForSingletonException(e.getFeatureConflicts());
+            if (!msg.isEmpty()) {
+                InstallException ie = create(msg, e);
+                ie.setData(assetNames);
+                return ie;
+            }
+        }
+        // incompatible features check (e.g cdi-2.0 jsf-2.2)
+        if (!e.getFeatureConflicts().isEmpty()) {
+            String msg = checkForIncompatibleFeatureException(e.getFeatureConflicts(), new HashSet<String>(assetNames));
+            if (!msg.isEmpty()) {
+                InstallException ie = create(msg, e);
+                ie.setData(assetNames);
+                return ie;
+            }
+        }
+
+        Collection<MissingRequirement> dependants = new ArrayList<MissingRequirement>(allRequirementsNotFound.size());
+        for (MissingRequirement f : allRequirementsNotFound) {
+            /**
+             * make sure it's not invalid asset names entered
+             */
+            if (!assetNames.contains(f.getRequirementName())) {
+                dependants.add(f);
+            }
+        }
+
+        /**
+         * not valid for current product case or dependency not applicable
+         */
+
+        MissingRequirement missingRequirementWithMaxVersion = null;
+        String newestVersion = null;
+        for (MissingRequirement mr : allRequirementsNotFound) {
+            if (missingRequirementWithMaxVersion == null)
+                missingRequirementWithMaxVersion = mr;
+            String r = mr.getRequirementName();
+            if (r.contains("productInstallType") ||
+                r.contains("productEdition") ||
+                r.contains("productVersion")) {
+
+                Pattern validNumericVersionOrRange = Pattern.compile("\\d+\\.\\d+\\.\\d+\\.\\d+");
+                Matcher matcher = validNumericVersionOrRange.matcher(r);
+                String version = null;
+                while (matcher.find()) {
+                    version = matcher.group();
+                    break;
+                }
+                List productMatchers = SelfExtractor.parseAppliesTo(mr.getRequirementName());
+                wlp.lib.extract.ReturnCode validInstallRC = SelfExtractor.validateProductMatches(installDir, productMatchers);
+                String currentEdition = "";
+                if (validInstallRC.getMessageKey().equals("invalidVersion") || validInstallRC.getMessageKey().equals("invalidEdition")) {
+                    int productEdition = 2;
+                    if (validInstallRC.getMessageKey().equals("invalidEdition")) {
+                        productEdition = 0;
+                    }
+                    currentEdition = (String) validInstallRC.getParameters()[productEdition];
+                }
+                if (!!!currentEdition.equals("Liberty Early Access")) {
+                    if (isNewerVersion(version, newestVersion, false)) {
+                        missingRequirementWithMaxVersion = mr;
+                        newestVersion = version;
+                    }
+                } else {
+                    if (isNewerVersion(version, newestVersion, true)) {
+                        missingRequirementWithMaxVersion = mr;
+                        newestVersion = version;
+                    }
+                }
+
+            }
+        }
+
+        /**
+         * missing dependent case, keep the current message
+         */
+        if (dependants.size() > 0) {
+            String missingRequirement = missingRequirementWithMaxVersion.getRequirementName();
+            if (!missingRequirement.contains(";")
+                && !missingRequirement.contains("productInstallType")
+                && !missingRequirement.contains("productEdition")
+                && !missingRequirement.contains("productVersion")) {
+                String assetsStr = "";
+                String feature = missingRequirement;
+                InstallException ie = null;
+
+                if (assetNames.size() == 1) {
+                    assetsStr = assetNames.iterator().next();
+                    ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_ASSET_MISSING_DEPENDENT" : "ERROR_MISSING_DEPENDENT",
+                                                                               assetsStr,
+                                                                               feature),
+                                e);
+                } else if (assetNames.size() > 1) {
+                    assetsStr = assetNames.toString();
+                    ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_ASSET_MISSING_MULTIPLE_DEPENDENT" : "ERROR_MISSING_MULTIPLE_DEPENDENT",
+                                                                               assetsStr,
+                                                                               feature),
+                                e);
+                }
+
+                ie.setData(assetsStr, feature);
+
+                return ie;
+
+            }
+        }
+
+        if (missingRequirementWithMaxVersion.getRequirementName().contains("productInstallType") ||
+            missingRequirementWithMaxVersion.getRequirementName().contains("productEdition") ||
+            missingRequirementWithMaxVersion.getRequirementName().contains("productVersion")) {
+            @SuppressWarnings("rawtypes")
+            List productMatchers = SelfExtractor.parseAppliesTo(missingRequirementWithMaxVersion.getRequirementName());
+            String feature = RepositoryDownloadUtil.getAssetNameFromMassiveResource(missingRequirementWithMaxVersion.getOwningResource());
+            String errMsg = "";
+            if (InstallUtils.containsIgnoreCase(assetNames, feature)) {
+                errMsg = validateProductMatches(feature, productMatchers, installDir, installingAsset);
+
+            } else {
+                String assetsStr = assetNames.size() == 1 ? assetNames.iterator().next() : InstallUtils.getFeatureListOutput(assetNames);
+                errMsg = validateProductMatches(assetsStr, feature, productMatchers, installDir, installingAsset);
+            }
+            if (!errMsg.isEmpty()) {
+                return create(errMsg, e, InstallException.NOT_VALID_FOR_CURRENT_PRODUCT);
+            }
+        }
+
+        InstallException ie;
+        if (isOpenLiberty) {
+            ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_FAILED_TO_RESOLVE_ASSETS" : "ERROR_FAILED_TO_RESOLVE_FEATURES_FOR_OPEN_LIBERTY",
+                                                                       InstallUtils.getFeatureListOutput(assetNames)),
+                        e);
+        } else {
+            ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_FAILED_TO_RESOLVE_ASSETS" : "ERROR_FAILED_TO_RESOLVE_FEATURES",
+                                                                       InstallUtils.getFeatureListOutput(assetNames)),
+                        e);
+        }
+
+        ie.setData(assetNames);
+
+        return ie;
+    }
+
+    /**
+     * Create an install exception from a repository resolution exception and asset names
+     *
+     * @param e
+     * @param assetNames
+     * @param edition
+     * @param installDir
+     * @param installingAsset
+     * @return
+     */
+    static InstallException create(RepositoryResolutionException e, Collection<String> assetNames, File installDir, boolean installingAsset,
+                                   boolean isOpenLiberty, boolean isFeatureUtility) {
+        isFeatureUtil = isFeatureUtility;
+        Collection<MissingRequirement> allRequirementsNotFound = e.getAllRequirementsResourcesNotFound();
+        if (allRequirementsNotFound.isEmpty()) {
+            String msg = checkForSingletonException(e.getFeatureConflicts());
+            if (!msg.isEmpty()) {
+                InstallException ie = create(msg, e);
+                ie.setData(assetNames);
+                return ie;
+            }
+        }
         Collection<MissingRequirement> dependants = new ArrayList<MissingRequirement>(allRequirementsNotFound.size());
         for (MissingRequirement f : allRequirementsNotFound) {
             /**
@@ -412,14 +676,21 @@ public class ExceptionUtils {
         }
 
         InstallException ie;
-        if (isOpenLiberty) {
-            ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_FAILED_TO_RESOLVE_ASSETS" : "ERROR_FAILED_TO_RESOLVE_FEATURES_FOR_OPEN_LIBERTY",
+        if (isFeatureUtility) {
+            ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage("ERROR_CANT_RESOLVE_FEATURE_PROVIDE_LINK",
                                                                        InstallUtils.getFeatureListOutput(assetNames)),
                         e);
         } else {
-            ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_FAILED_TO_RESOLVE_ASSETS" : "ERROR_FAILED_TO_RESOLVE_FEATURES",
-                                                                       InstallUtils.getFeatureListOutput(assetNames)),
-                        e);
+            if (isOpenLiberty) {
+                ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_FAILED_TO_RESOLVE_ASSETS" : "ERROR_FAILED_TO_RESOLVE_FEATURES_FOR_OPEN_LIBERTY",
+                                                                           InstallUtils.getFeatureListOutput(assetNames)),
+                            e);
+            } else {
+                ie = create(Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_FAILED_TO_RESOLVE_ASSETS" : "ERROR_FAILED_TO_RESOLVE_FEATURES",
+                                                                           InstallUtils.getFeatureListOutput(assetNames)),
+                            e);
+            }
+
         }
 
         ie.setData(assetNames);
@@ -551,6 +822,10 @@ public class ExceptionUtils {
                             errMsg = Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_ASSET_INVALID_PRODUCT_EDITION" : "ERROR_INVALID_PRODUCT_EDITION",
                                                                                     new Object[] { feature, productName, edition, applicableProducts.toString(), productName,
                                                                                                    edition });
+                            if (isFeatureUtil) {
+                                errMsg = Messages.INSTALL_KERNEL_MESSAGES.getLogMessage(installingAsset ? "ERROR_ASSET_INVALID_PRODUCT_EDITION" : "ERROR_INVALID_PRODUCT_EDITION_FEATURE_UTILITY",
+                                                                                        new Object[] { feature, productName, edition, applicableProducts.toString() });
+                            }
                         }
 
                     } else {

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017, 2019 IBM Corporation and others.
+ * Copyright (c) 2017, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -24,6 +24,8 @@ import org.eclipse.microprofile.metrics.MetricID;
 import org.eclipse.microprofile.metrics.MetricRegistry;
 import org.eclipse.microprofile.metrics.Timer;
 
+import com.ibm.websphere.ras.Tr;
+import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.microprofile.metrics.Constants;
 import com.ibm.ws.microprofile.metrics.exceptions.EmptyRegistryException;
 import com.ibm.ws.microprofile.metrics.exceptions.NoSuchMetricException;
@@ -34,6 +36,7 @@ import com.ibm.ws.microprofile.metrics.impl.SharedMetricRegistries;
  *
  */
 public class Util {
+    private static final TraceComponent tc = Tr.register(Util.class);
 
     public static SharedMetricRegistries SHARED_METRIC_REGISTRIES;
 
@@ -96,8 +99,9 @@ public class Util {
         return returnMap;
     }
 
-    private static MetricRegistry getRegistry(String registryName) throws NoSuchRegistryException {
+    protected static MetricRegistry getRegistry(String registryName) throws NoSuchRegistryException {
         if (!Constants.REGISTRY_NAMES_LIST.contains(registryName)) {
+            Tr.event(tc, Constants.REGISTRY_NAMES_LIST.toString());
             throw new NoSuchRegistryException();
         }
         return SHARED_METRIC_REGISTRIES.getOrCreate(registryName);

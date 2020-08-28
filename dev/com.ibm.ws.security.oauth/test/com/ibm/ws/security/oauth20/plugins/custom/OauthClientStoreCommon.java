@@ -34,6 +34,7 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 
 import com.google.gson.JsonObject;
+import com.ibm.oauth.core.api.error.OidcServerException;
 import com.ibm.oauth.core.internal.oauth20.OAuth20Constants;
 import com.ibm.websphere.crypto.PasswordUtil;
 import com.ibm.websphere.security.oauth20.store.OAuthClient;
@@ -108,9 +109,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             boolean result = oauthClientStore.exists(clientId);
             fail("Should have thrown exception but did not. Result was " + result);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1467E.+" + clientId;
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 
@@ -126,6 +127,12 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
     void verifyExceptionAndLogMessages(Exception e, String msgRegex) {
         verifyException(e, msgRegex);
         assertFalse("Exception message should not have contained OAuthStoreException message but did.", e.getLocalizedMessage().contains(defaultExceptionMsg));
+        verifyLogMessage(outputMgr, msgRegex + ".+" + Pattern.quote(defaultExceptionMsg));
+    }
+
+    void verifyExceptionAndLogMessagesOidc(OidcServerException e, String msgRegex) {
+        verifyExceptionString(e.getErrorDescription(), msgRegex);
+        assertFalse("Exception message should not have contained OAuthStoreException message but did.", e.getErrorDescription().contains(defaultExceptionMsg));
         verifyLogMessage(outputMgr, msgRegex + ".+" + Pattern.quote(defaultExceptionMsg));
     }
 
@@ -145,7 +152,6 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         if (clientMetadataAsJson != null && clientMetadataAsJson.has(OAuth20Constants.CLIENT_SECRET)) {
             String metaClientSecret = clientMetadataAsJson.get(OAuth20Constants.CLIENT_SECRET).getAsString();
             if (metaClientSecret != null && !metaClientSecret.isEmpty()) {
-                String meta = null;
                 if (isHash) {
                     HashSecretUtils.hashClientMetaTypeSecret(clientMetadataAsJson, client.getClientId(), true);
                 } else {
@@ -189,9 +195,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             OidcBaseClient retrievedClient = oauthClientStore.get(clientId);
             fail("Should have thrown exception but did not. Result was " + retrievedClient);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1467E.+" + clientId;
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 
@@ -242,9 +248,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             boolean result = oauthClientStore.validateClient(op2Client.getClientId(), op2Client.getClientSecret());
             fail("Should have thrown exception but did not. Result was " + result);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1467E.+" + clientId;
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 
@@ -332,9 +338,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             boolean result = oauthClientStore.delete(clientId);
             fail("Should have thrown exception but did not. Result was " + result);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1476E.+" + clientId;
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 
@@ -349,7 +355,7 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
 
         assertEquals("There must be a collection of clients.", 2, clients.size());
         assertEquals("The registration URI must not be changed in the clients.", AbstractOidcRegistrationBaseTest.REGISTRATION_CLIENT_URI,
-                     clients.iterator().next().getRegistrationClientUri());
+                clients.iterator().next().getRegistrationClientUri());
     }
 
     @Test
@@ -364,9 +370,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             Collection<OidcBaseClient> clients = oauthClientStore.getAll();
             fail("Should have thrown exception but did not. Result was " + clients);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1468E";
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 
@@ -449,9 +455,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             OidcBaseClient result = oauthClientStore.put(op2Client);
             fail("Should have thrown exception but did not. Result was " + result);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1464E.+" + op2Client.getClientId();
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 
@@ -485,9 +491,9 @@ public class OauthClientStoreCommon extends AbstractOidcRegistrationBaseTest {
         try {
             OidcBaseClient result = oauthClientStore.update(op2Client);
             fail("Should have thrown exception but did not. Result was " + result);
-        } catch (Exception e) {
+        } catch (OidcServerException e) {
             String msgRegex = "CWWKS1473E.+" + op2Client.getClientId();
-            verifyExceptionAndLogMessages(e, msgRegex);
+            verifyExceptionAndLogMessagesOidc(e, msgRegex);
         }
     }
 

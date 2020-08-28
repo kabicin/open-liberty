@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2018, 2019 IBM Corporation and others.
+ * Copyright (c) 2018, 2020 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -14,6 +14,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import com.ibm.ws.microprofile.faulttolerance.spi.BulkheadPolicy;
 import com.ibm.ws.microprofile.faulttolerance.spi.CircuitBreakerPolicy;
+import com.ibm.ws.microprofile.faulttolerance.spi.FallbackPolicy;
 import com.ibm.ws.microprofile.faulttolerance.spi.MetricRecorder;
 import com.ibm.ws.microprofile.faulttolerance.spi.RetryPolicy;
 import com.ibm.ws.microprofile.faulttolerance.spi.TimeoutPolicy;
@@ -21,6 +22,8 @@ import com.ibm.ws.microprofile.faulttolerance20.state.impl.AsyncBulkheadStateImp
 import com.ibm.ws.microprofile.faulttolerance20.state.impl.AsyncBulkheadStateNullImpl;
 import com.ibm.ws.microprofile.faulttolerance20.state.impl.CircuitBreakerStateImpl;
 import com.ibm.ws.microprofile.faulttolerance20.state.impl.CircuitBreakerStateNullImpl;
+import com.ibm.ws.microprofile.faulttolerance20.state.impl.FallbackStateImpl;
+import com.ibm.ws.microprofile.faulttolerance20.state.impl.FallbackStateNullImpl;
 import com.ibm.ws.microprofile.faulttolerance20.state.impl.RetryStateImpl;
 import com.ibm.ws.microprofile.faulttolerance20.state.impl.RetryStateNullImpl;
 import com.ibm.ws.microprofile.faulttolerance20.state.impl.SyncBulkheadStateImpl;
@@ -116,6 +119,20 @@ public class FaultToleranceStateFactory {
             return new AsyncBulkheadStateNullImpl(executorService);
         } else {
             return new AsyncBulkheadStateImpl(executorService, policy, metricRecorder);
+        }
+    }
+
+    /**
+     * Create an object implementing Fallback
+     *
+     * @param policy the FallbackPolicy, may be {@code null}
+     * @return a new FallbackState
+     */
+    public FallbackState createFallbackState(FallbackPolicy policy) {
+        if (policy == null) {
+            return new FallbackStateNullImpl();
+        } else {
+            return new FallbackStateImpl(policy);
         }
     }
 

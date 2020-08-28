@@ -92,9 +92,9 @@ class SystemConfiguration {
         this.extendedMetatypeManager = new ExtendedMetatypeManager(metatypeRegistry, configAdmin);
 
         this.configRetriever = new ConfigRetriever(caSupport, configAdmin, variableRegistry);
-        this.validator = new ConfigValidator(metatypeRegistry);
+        this.validator = new ConfigValidator(metatypeRegistry, variableRegistry);
 
-        XMLConfigParser parser = new XMLConfigParser(locationService);
+        XMLConfigParser parser = new XMLConfigParser(locationService, variableRegistry);
         this.serverXMLConfig = new ServerXMLConfiguration(bc, locationService, parser);
 
         ConfigEvaluator ce = new ConfigEvaluator(configRetriever, metatypeRegistry, variableRegistry, this.serverXMLConfig);

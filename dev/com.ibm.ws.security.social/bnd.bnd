@@ -54,7 +54,8 @@ com.ibm.ws.security.social.internal.GoogleLoginConfigImpl,\
 com.ibm.ws.security.social.internal.LinkedinLoginConfigImpl,\
 com.ibm.ws.security.social.internal.TwitterLoginConfigImpl, \
 com.ibm.ws.security.social.internal.SocialLoginWebappConfigImpl, \
-com.ibm.ws.security.social.internal.OidcLoginConfigImpl
+com.ibm.ws.security.social.internal.OidcLoginConfigImpl, \
+com.ibm.ws.security.social.internal.OkdServiceLoginImpl
 
 -dsannotations-inherit = true
 
@@ -94,6 +95,15 @@ Service-Component:\
     greedy:='authFilter,socialLoginConfig,socialLoginWebappConfig'; \
     multiple:='authFilter,socialLoginConfig'; \
     properties:="service.vendor=IBM,id=SocialLoginTAI,TAIName=SocialLoginTAI,invokeAfterSSO:Boolean=true", \
+  com.ibm.ws.security.socialmediawithaccesstoken.tai; \
+    implementation:=com.ibm.ws.security.social.tai.SocialLoginWithAccessToken; \
+    provide:='com.ibm.wsspi.security.tai.TrustAssociationInterceptor'; \
+    configuration-policy:=ignore; \
+    modified:='modified'; \
+    activate:='activate'; \
+    deactivate:='deactivate'; \
+    immediate:=true; \
+    properties:="service.vendor=IBM,id=SocialLoginWtihATTAI,TAIName=SocialLoginWtihATTAI,invokeBeforeSSO:Boolean=true,addLTPACookieToResponse:Boolean=false", \
   com.ibm.ws.security.social.web.EndpointServices; \
     implementation:=com.ibm.ws.security.social.web.EndpointServices; \
     provide:=com.ibm.ws.security.social.web.EndpointServices; \
@@ -120,7 +130,7 @@ Include-Resource: \
 	com.ibm.ws.crypto.passwordutil;version=latest,\
 	com.ibm.ws.kernel.service;version=latest,\
 	com.ibm.ws.logging;version=latest,\
-	com.ibm.ws.org.apache.commons.codec.1.4;version=latest,\
+	com.ibm.ws.org.apache.commons.codec;version=latest,\
 	com.ibm.ws.org.apache.httpcomponents;version=latest,\
 	com.ibm.ws.org.jose4j;version=latest,\
 	com.ibm.ws.org.osgi.annotation.versioning;version=latest,\
@@ -138,13 +148,14 @@ Include-Resource: \
 	com.ibm.ws.webcontainer.security;version=latest,\
 	com.ibm.ws.webcontainer;version=latest,\
 	com.ibm.wsspi.org.osgi.service.component.annotations;version=latest,\
-        com.ibm.ws.security.openidconnect.clients.common;version=latest
-        
+	com.ibm.ws.security.openidconnect.clients.common;version=latest,\
+	org.glassfish:javax.json;version=1.0
+
 -testpath: \
     ../build.sharedResources/lib/junit/old/junit.jar;version=file, \
     com.ibm.ws.junit.extensions;version=latest, \
     org.jmock:jmock-legacy;version=2.5.0, \
-    cglib:cglib-nodep;version=3.2.10, \
+    cglib:cglib-nodep;version=3.3.0, \
     org.hamcrest:hamcrest-all;version=1.3, \
     org.jmock:jmock-junit4;strategy=exact;version=2.5.1, \
     org.jmock:jmock;strategy=exact;version=2.5.1, \
@@ -157,4 +168,5 @@ Include-Resource: \
     com.ibm.ws.kernel.boot.logging;version=latest, \
     com.ibm.ws.kernel.security.thread;version=latest, \
     com.ibm.ws.kernel.boot.core;version=latest, \
+    com.ibm.ws.container.service.compat;version=latest, \
     com.ibm.ws.kernel.boot;version=latest

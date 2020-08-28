@@ -31,11 +31,11 @@ import com.ibm.ws.com.unboundid.InMemoryLDAPServer;
 import com.ibm.ws.security.registry.test.UserRegistryServletConnection;
 import com.unboundid.ldap.sdk.Entry;
 
+import componenttest.annotation.Server;
 import componenttest.custom.junit.runner.FATRunner;
 import componenttest.custom.junit.runner.Mode;
 import componenttest.custom.junit.runner.Mode.TestMode;
 import componenttest.topology.impl.LibertyServer;
-import componenttest.topology.impl.LibertyServerFactory;
 import componenttest.topology.utils.LDAPFatUtils;
 import componenttest.topology.utils.LDAPUtils;
 
@@ -45,7 +45,10 @@ import componenttest.topology.utils.LDAPUtils;
 @RunWith(FATRunner.class)
 @Mode(TestMode.LITE)
 public class MultiValuedOutputPropMappingTest {
-    private static LibertyServer libertyServer = LibertyServerFactory.getLibertyServer("com.ibm.ws.security.wim.registry.fat.MultiValuedOutputPropMapping");
+
+    @Server("com.ibm.ws.security.wim.registry.fat.MultiValuedOutputPropMapping")
+    public static LibertyServer libertyServer;
+
     private static final Class<?> c = MultiValuedOutputPropMappingTest.class;
     private static UserRegistryServletConnection servlet;
     private static InMemoryLDAPServer ds = null;
@@ -194,7 +197,7 @@ public class MultiValuedOutputPropMappingTest {
         ldapRegistry.setLdapType("Custom");
         ldapRegistry.setRealm("LdapRealm");
         ldapRegistry.setHost("localhost");
-        ldapRegistry.setPort(String.valueOf(ds.getListenPort()));
+        ldapRegistry.setPort(String.valueOf(ds.getLdapPort()));
         ldapRegistry.setBindDN(InMemoryLDAPServer.getBindDN());
         ldapRegistry.setBindPassword(InMemoryLDAPServer.getBindPassword());
         ldapRegistry.setTimestampFormat("yyyyMMddHHmmss.SSSSZ"); // 20180730202338.850-0000Z

@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2011, 2019 IBM Corporation and others.
+# Copyright (c) 2011, 2020 IBM Corporation and others.
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Eclipse Public License v1.0
 # which accompanies this distribution, and is available at
@@ -138,23 +138,27 @@ LOG_FILE_RESUMED.useraction=No se requiere ninguna acci\u00f3n.
 
 JSON_FIELDS_FORMAT_WARNING=TRAS3007W: La correlaci\u00f3n de nombre del campo de registro de JSON no tiene un formato correcto.
 JSON_FIELDS_FORMAT_WARNING.explanation=La correlaci\u00f3n de nombre del campo de registro de JSON no tiene un formato correcto.
-JSON_FIELDS_FORMAT_WARNING.useraction=Aseg\u00farese de que la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON sea correcta. La correlaci\u00f3n de nombre del campo de registro de JSON puede especificarse varias maneras, como se indica en la documentaci\u00f3n de la configuraci\u00f3n de registro.
+JSON_FIELDS_FORMAT_WARNING.useraction=Aseg\u00farese de que la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON sea correcta. La correlaci\u00f3n de nombre del campo JSON puede especificarse varias maneras, como se indica en la documentaci\u00f3n de la configuraci\u00f3n de registro.
 
 JSON_FIELDS_FORMAT_WARNING_2=TRAS3008W: La propiedad de correlaci\u00f3n de nombre del campo de registro de JSON tiene demasiadas se\u00f1ales, o demasiado pocas, en una entrada.
-JSON_FIELDS_FORMAT_WARNING_2.explanation=El formato de la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON debe ser knownFieldName:newFieldName or eventType:knownFieldName:newFieldName.
-JSON_FIELDS_FORMAT_WARNING_2.useraction=El formato de la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON debe ser knownFieldName:newFieldName or eventType:knownFieldName:newFieldName.
+JSON_FIELDS_FORMAT_WARNING_2.explanation=El formato de la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON debe ser defaultFieldName:newFieldName o origen:defaultFieldName:newFieldName.
+JSON_FIELDS_FORMAT_WARNING_2.useraction=El formato de la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON debe ser defaultFieldName:newFieldName o origen:defaultFieldName:newFieldName.
 
-JSON_FIELDS_NO_MATCH=TRAS3009W: El nombre de campo de registro de JSON no coincide con uno de los nombres de campo conocidos del suceso o sucesos especificado(s).
+JSON_FIELDS_NO_MATCH=TRAS3009W: El nombre de campo de registro de JSON no coincide con uno de los nombres de campo conocidos del origen u or\u00edgenes especificado(s).
 JSON_FIELDS_NO_MATCH.explanation=El nombre de campo de registro de JSON no coincide con uno de los nombres de campo conocidos
 JSON_FIELDS_NO_MATCH.useraction=Proporcione un nombre de campo de registro de JSON que coincida con uno de los campos conocidos (p. ej;. message, ibm_datetime, ibm_sequence)
 
-JSON_FIELDS_INCORRECT_EVENT_TYPE=TRAS3010W: El tipo de suceso proporcionado no coincide con ninguno de los tipos de suceso conocidos
-JSON_FIELDS_INCORRECT_EVENT_TYPE.explanation=Los tipos de suceso aceptados con: liberty_message, liberty_trace, liberty_accesslog, liberty_ffdc
-JSON_FIELDS_INCORRECT_EVENT_TYPE.useraction=Los tipos de suceso aceptados con: liberty_message, liberty_trace, liberty_accesslog, liberty_ffdc
+JSON_FIELDS_INCORRECT_EVENT_TYPE=TRAS3010W: El identificador de origen de correlaci\u00f3n de campo de registro de JSON proporcionado no coincide con uno de los or\u00edgenes conocidos
+JSON_FIELDS_INCORRECT_EVENT_TYPE.explanation=Los or\u00edgenes aceptados son: message, trace, accessLog, ffdc, audit
+JSON_FIELDS_INCORRECT_EVENT_TYPE.useraction=Los or\u00edgenes aceptados son: message, trace, accessLog, ffdc, audit
 
 JSON_FIELDS_INVALID_CHARACHTER=TRAS3011W: Se ha especificado un car\u00e1cter no v\u00e1lido en la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON
 JSON_FIELDS_INVALID_CHARACHTER.explanation= Solo se aceptan letras, n\u00fameros y el signo : en la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON
 JSON_FIELDS_INVALID_CHARACHTER.useraction= Cambie el valor de la propiedad de correlaci\u00f3n de nombre del campo de registro de JSON para eliminar los caracteres no v\u00e1lidos
+
+JSON_ACCESS_LOG_NO_HEADER_NAME_SPECIFIED=TRAS3012W: Falta el nombre de cabecera de uno o m\u00e1s de los campos accessLogging logFormat: {0}.
+JSON_ACCESS_LOG_NO_HEADER_NAME_SPECIFIED.explanation=El registro de JSON utiliza el atributo logFormat de accessLogging para seleccionar qu\u00e9 campos de mensaje http_access.log message deben incluirse. Debe suministrarse un nombre de cabecera cuando se utilizan los campo %i o %o en el atributo accessLogging logFormat.
+JSON_ACCESS_LOG_NO_HEADER_NAME_SPECIFIED.useraction=Proporcione un nombre de cabecera para el campo en el atributo accessLogging logFormat.
 
 # Note: no 9999 message kept here because saving footprint space is more important
 
